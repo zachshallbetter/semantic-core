@@ -1,0 +1,21 @@
+{
+  "name": "same content hash, different semantic subjects",
+  "proves": ["Stage 1 item 2 and section 12: identical bytes do not prove identical meaning; a hash never merges artifacts"],
+  "steps": [
+    { "thing": { "as": "dishwasher", "label": "Dishwasher" } },
+    { "thing": { "as": "dryer", "label": "Dryer" } },
+    { "file": { "as": "blank-a", "label": "Dishwasher service form (blank)", "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Kitchen/Service form.pdf", "hash": "blank-form" } },
+    { "file": { "as": "blank-b", "label": "Dryer service form (blank)", "volume": "vol-robin", "document": "doc-2", "path": "/Volumes/Robin/Laundry/Service form.pdf", "hash": "blank-form" } },
+    { "link": { "as": "a-documents", "source": "blank-a.artifact", "predicate": "DOCUMENTS", "target": "dishwasher" } },
+    { "link": { "as": "b-documents", "source": "blank-b.artifact", "predicate": "DOCUMENTS", "target": "dryer" } },
+    { "expect_distinct_artifacts": ["blank-a", "blank-b"] },
+    { "observe": { "volume": "vol-leo", "document": "doc-3", "path": "/Volumes/Leo/Service form.pdf", "hash": "blank-form", "expect": "AMBIGUOUS", "rule": "content-hash-multiple-candidates", "candidates": ["blank-a", "blank-b"] } },
+    { "expect_distinct_artifacts": ["blank-a", "blank-b"] },
+    { "expect_count": { "entity": "dishwasher", "relationships": 1 } },
+    { "expect_count": { "entity": "dryer", "relationships": 1 } },
+    { "gone": { "instance": "blank-a" } },
+    { "gone": { "instance": "blank-b" } },
+    { "observe": { "volume": "vol-leo", "document": "doc-3", "path": "/Volumes/Leo/Service form.pdf", "hash": "blank-form", "expect": "AMBIGUOUS", "rule": "content-hash-multiple-candidates", "candidates": ["blank-a", "blank-b"] } },
+    { "expect_distinct_artifacts": ["blank-a", "blank-b"] }
+  ]
+}

@@ -1,2 +1,4 @@
-//! sc-ffi. See docs/semantic-core-definition-v0.2.2.md and docs/build-brief-2026-10-10.md.
-//! Task order and acceptance criteria live in the build brief; nothing here is implemented yet.
+//! sc-ffi: the C ABI over sc-core for the Swift package.
+//!
+//! Not started. The roadmap in docs/ROADMAP.md places it after the Rust core;
+//! nothing here is implemented yet.

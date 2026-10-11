@@ -1,0 +1,35 @@
+{
+  "description": "observed provenance with observed_at and expires_at; member access",
+  "envelope": {
+    "schema_version": "sc-event-0.1",
+    "subject_id": "sc:instance:01J9ZX0000000000000000LEO1",
+    "compatibility": {
+      "protocol": "sc-event-0.1",
+      "subject_schema": "note-1"
+    },
+    "provenance": {
+      "kind": "observed",
+      "authority": "scanner:leo",
+      "source": "file:/Volumes/Robin/Manuals/dishwasher.pdf",
+      "source_hash": "sha256:c6a96b9d1f0c6b856ff3c0082a312aab399a284fcd3d53594efc22d33c645c76",
+      "observed_at": "2026-10-10T12:00:00Z",
+      "expires_at": "2026-10-10T12:30:00Z"
+    },
+    "minimum_access": "member",
+    "body": {
+      "text": "seen at /Volumes/Robin/Manuals/dishwasher.pdf",
+      "members": [
+        {
+          "name": "title",
+          "minimum_access": "public"
+        },
+        {
+          "name": "serial",
+          "minimum_access": "owner"
+        }
+      ]
+    }
+  },
+  "canonical_json": "{\"body\":{\"members\":[{\"minimum_access\":\"public\",\"name\":\"title\"},{\"minimum_access\":\"owner\",\"name\":\"serial\"}],\"text\":\"seen at /Volumes/Robin/Manuals/dishwasher.pdf\"},\"compatibility\":{\"protocol\":\"sc-event-0.1\",\"subject_schema\":\"note-1\"},\"minimum_access\":\"member\",\"provenance\":{\"authority\":\"scanner:leo\",\"expires_at\":\"2026-10-10T12:30:00Z\",\"kind\":\"observed\",\"observed_at\":\"2026-10-10T12:00:00Z\",\"source\":\"file:/Volumes/Robin/Manuals/dishwasher.pdf\",\"source_hash\":\"sha256:c6a96b9d1f0c6b856ff3c0082a312aab399a284fcd3d53594efc22d33c645c76\"},\"schema_version\":\"sc-event-0.1\",\"subject_id\":\"sc:instance:01J9ZX0000000000000000LEO1\"}",
+  "canonical_hash": "sha256:2152aabbcfc8732e9d6eb61572cae5dc11d35b514442925fa3c060dbd02cbf17"
+}

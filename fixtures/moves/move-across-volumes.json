@@ -1,0 +1,19 @@
+{
+  "name": "move across volumes",
+  "proves": ["Stage 1 item 1: a cross-volume move resolves only when exactly one candidate matches the content hash and the previous instance is gone"],
+  "steps": [
+    { "thing": { "as": "dishwasher", "label": "Dishwasher" } },
+    { "file": { "as": "warranty", "label": "Warranty.pdf", "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Kitchen/Warranty.pdf", "hash": "warranty-v1" } },
+    { "link": { "as": "documents", "source": "warranty.artifact", "predicate": "DOCUMENTS", "target": "dishwasher" } },
+    { "observe": { "volume": "vol-leo", "document": "doc-9", "path": "/Volumes/Leo/Archive/Warranty.pdf", "hash": "warranty-v1", "expect": "AMBIGUOUS", "rule": "content-hash-candidate-still-present", "candidates": ["warranty"] } },
+    { "expect_instance": { "instance": "warranty", "status": "present", "volume": "vol-robin" } },
+    { "gone": { "instance": "warranty" } },
+    { "expect_instance": { "instance": "warranty", "status": "missing", "volume": "vol-robin" } },
+    { "expect_state": { "relationship": "documents", "state": "PRESENT" } },
+    { "observe": { "volume": "vol-leo", "document": "doc-9", "path": "/Volumes/Leo/Archive/Warranty.pdf", "hash": "warranty-v1", "expect": "RESOLVED", "rule": "content-hash-single-candidate-previous-gone", "instance": "warranty" } },
+    { "expect_instance": { "instance": "warranty", "status": "present", "volume": "vol-leo", "path": "/Volumes/Leo/Archive/Warranty.pdf" } },
+    { "expect_state": { "relationship": "documents", "state": "PRESENT" } },
+    { "expect_count": { "entity": "dishwasher", "relationships": 1 } },
+    { "observe": { "volume": "vol-leo", "document": "doc-9", "path": "/Volumes/Leo/Archive/Warranty.pdf", "hash": "warranty-v1", "expect": "RESOLVED", "rule": "within-volume-key", "instance": "warranty" } }
+  ]
+}

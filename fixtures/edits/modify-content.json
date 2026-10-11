@@ -1,0 +1,16 @@
+{
+  "name": "modify content in place",
+  "proves": ["Stage 1 item 3: an edit resolves to the same instance with an explicit content-changed outcome and a new revision; the link survives"],
+  "steps": [
+    { "thing": { "as": "dishwasher", "label": "Dishwasher" } },
+    { "file": { "as": "notes", "label": "Service notes.md", "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Kitchen/Service notes.md", "hash": "notes-v1" } },
+    { "link": { "as": "documents", "source": "notes.artifact", "predicate": "DOCUMENTS", "target": "dishwasher" } },
+    { "expect_revisions": { "artifact": "notes.artifact", "count": 1 } },
+    { "observe": { "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Kitchen/Service notes.md", "hash": "notes-v2", "expect": "RESOLVED", "rule": "within-volume-key", "instance": "notes", "content_changed": true } },
+    { "expect_instance": { "instance": "notes", "status": "present", "revision_hash": "notes-v2" } },
+    { "expect_revisions": { "artifact": "notes.artifact", "count": 2 } },
+    { "expect_state": { "relationship": "documents", "state": "PRESENT" } },
+    { "observe": { "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Kitchen/Service notes.md", "hash": "notes-v2", "expect": "RESOLVED", "rule": "within-volume-key", "instance": "notes", "content_changed": false } },
+    { "expect_revisions": { "artifact": "notes.artifact", "count": 2 } }
+  ]
+}

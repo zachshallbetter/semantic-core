@@ -1,0 +1,40 @@
+{
+  "description": "the derived vector re-signed under a rotated key; the canonical hash does not change",
+  "envelope": {
+    "schema_version": "sc-event-0.1",
+    "subject_id": "sc:relationship:01J9ZX0000000000000000HALE",
+    "compatibility": {
+      "protocol": "sc-event-0.1",
+      "subject_schema": "note-1"
+    },
+    "provenance": {
+      "kind": "derived",
+      "authority": "owner-local",
+      "source": "resolver:within-volume-key",
+      "source_hash": "sha256:439c3635079b57a69aff22860369462fb9330c300fa4dbc70426f087192e369d"
+    },
+    "minimum_access": "member",
+    "body": {
+      "text": "warranty.pdf DOCUMENTS dishwasher",
+      "members": [
+        {
+          "name": "title",
+          "minimum_access": "public"
+        },
+        {
+          "name": "serial",
+          "minimum_access": "owner"
+        }
+      ]
+    }
+  },
+  "canonical_json": "{\"body\":{\"members\":[{\"minimum_access\":\"public\",\"name\":\"title\"},{\"minimum_access\":\"owner\",\"name\":\"serial\"}],\"text\":\"warranty.pdf DOCUMENTS dishwasher\"},\"compatibility\":{\"protocol\":\"sc-event-0.1\",\"subject_schema\":\"note-1\"},\"minimum_access\":\"member\",\"provenance\":{\"authority\":\"owner-local\",\"kind\":\"derived\",\"source\":\"resolver:within-volume-key\",\"source_hash\":\"sha256:439c3635079b57a69aff22860369462fb9330c300fa4dbc70426f087192e369d\"},\"schema_version\":\"sc-event-0.1\",\"subject_id\":\"sc:relationship:01J9ZX0000000000000000HALE\"}",
+  "canonical_hash": "sha256:954cb41ea5cf5c4cef41f4cf589291af420549c9e83263451630784bbea5220a",
+  "signature": {
+    "key_id": "owner-key:jordan:2026-11",
+    "seed_hex": "0808080808080808080808080808080808080808080808080808080808080808",
+    "signature": "mV_C-H18QUZwoAE0dXAWd5cv_92CfqQq1mMHVQ3yiiFfjEUSC3OFA16Z_LOXmg0RppJRLxNWQetulYYPuGQMDg",
+    "verifying_key_hex": "1398f62c6d1a457c51ba6a4b5f3dbd2f69fca93216218dc8997e416bd17d93ca"
+  },
+  "expect": "verifies"
+}

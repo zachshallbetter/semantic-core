@@ -1,0 +1,33 @@
+{
+  "description": "declared provenance, owner-only, no freshness window",
+  "envelope": {
+    "schema_version": "sc-event-0.1",
+    "subject_id": "sc:thing:01J9ZX0000000000000000AVA1",
+    "compatibility": {
+      "protocol": "sc-event-0.1",
+      "subject_schema": "note-1"
+    },
+    "provenance": {
+      "kind": "declared",
+      "authority": "owner-local",
+      "source": "actor:ava",
+      "source_hash": "sha256:6186c1f131e8c42ed706e0180641b2c414f1a34ae8ca4ed98884c140768cfd2a"
+    },
+    "minimum_access": "owner",
+    "body": {
+      "text": "Ava's dishwasher",
+      "members": [
+        {
+          "name": "title",
+          "minimum_access": "public"
+        },
+        {
+          "name": "serial",
+          "minimum_access": "owner"
+        }
+      ]
+    }
+  },
+  "canonical_json": "{\"body\":{\"members\":[{\"minimum_access\":\"public\",\"name\":\"title\"},{\"minimum_access\":\"owner\",\"name\":\"serial\"}],\"text\":\"Ava's dishwasher\"},\"compatibility\":{\"protocol\":\"sc-event-0.1\",\"subject_schema\":\"note-1\"},\"minimum_access\":\"owner\",\"provenance\":{\"authority\":\"owner-local\",\"kind\":\"declared\",\"source\":\"actor:ava\",\"source_hash\":\"sha256:6186c1f131e8c42ed706e0180641b2c414f1a34ae8ca4ed98884c140768cfd2a\"},\"schema_version\":\"sc-event-0.1\",\"subject_id\":\"sc:thing:01J9ZX0000000000000000AVA1\"}",
+  "canonical_hash": "sha256:df41f15c5af728f15693c747520a2a576ef8abd3eab4773ba5029a6e6edab60e"
+}

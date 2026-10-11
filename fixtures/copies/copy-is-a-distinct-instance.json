@@ -1,0 +1,18 @@
+{
+  "name": "a copy is a distinct instance of the same artifact",
+  "proves": ["Stage 1 item 2: copying creates a distinct instance; identical hashes do not merge"],
+  "steps": [
+    { "thing": { "as": "dishwasher", "label": "Dishwasher" } },
+    { "file": { "as": "manual", "label": "Manual.pdf", "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Manuals/Manual.pdf", "hash": "manual-v1" } },
+    { "link": { "as": "documents", "source": "manual.artifact", "predicate": "DOCUMENTS", "target": "dishwasher" } },
+    { "observe": { "volume": "vol-robin", "document": "doc-2", "path": "/Volumes/Robin/Desktop/Manual copy.pdf", "hash": "manual-v1", "expect": "AMBIGUOUS", "rule": "content-hash-candidate-still-present", "candidates": ["manual"] } },
+    { "expect_instance": { "instance": "manual", "status": "present", "path": "/Volumes/Robin/Manuals/Manual.pdf" } },
+    { "copy": { "as": "manual-copy", "of": "manual", "volume": "vol-robin", "document": "doc-2", "path": "/Volumes/Robin/Desktop/Manual copy.pdf" } },
+    { "expect_distinct": ["manual", "manual-copy"] },
+    { "expect_same_artifact": ["manual", "manual-copy"] },
+    { "expect_count": { "entity": "dishwasher", "relationships": 1 } },
+    { "observe": { "volume": "vol-robin", "document": "doc-2", "path": "/Volumes/Robin/Desktop/Manual copy.pdf", "hash": "manual-v1", "expect": "RESOLVED", "rule": "within-volume-key", "instance": "manual-copy" } },
+    { "gone": { "instance": "manual" } },
+    { "observe": { "volume": "vol-leo", "document": "doc-7", "path": "/Volumes/Leo/Manual.pdf", "hash": "manual-v1", "expect": "AMBIGUOUS", "rule": "content-hash-multiple-candidates", "candidates": ["manual", "manual-copy"] } }
+  ]
+}

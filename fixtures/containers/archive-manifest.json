@@ -1,0 +1,9 @@
+{
+  "name": "household-papers.zip",
+  "description": "A static ZIP built by the container test at run time; no binary is committed. Member contents are the strings below, so sizes and checksums are reproducible.",
+  "members": [
+    { "path": "Kitchen/Dishwasher warranty.txt", "content": "Warranty for the dishwasher, model DW-200, purchased 2024-03-14." },
+    { "path": "Kitchen/Dishwasher manual.txt", "content": "Manual: rinse aid, filter cleaning, error codes E1 to E9." },
+    { "path": "Garage/Bike receipt.txt", "content": "Receipt: one bicycle, frame size M, paid in full." }
+  ]
+}

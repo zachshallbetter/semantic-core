@@ -405,11 +405,20 @@ impl Store {
     /// visible to them.
     pub fn history(&self, principal: &Principal, id: &str) -> Result<Vec<Event>> {
         self.require_visible(principal, id)?;
+        // A relationship's history includes every assertion that concerns it.
+        let mut ids: Vec<String> = vec![id.to_string()];
+        if matches!(self.kind_of(principal, id)?, Kind::Relationship) {
+            let mut statement = self.conn.prepare("SELECT id FROM assertions WHERE relationship_id = ?1 ORDER BY rowid")?;
+            let assertion_ids = statement.query_map(params![id], |row| row.get::<_, String>(0))?;
+            for assertion_id in assertion_ids {
+                ids.push(assertion_id?);
+            }
+        }
         let mut out = Vec::new();
         for event in self.all_events()? {
             let change = &event.envelope.body.change;
             let (_, subject) = change.subject();
-            let touches = subject == id || change.referenced_ids().iter().any(|r| r == id);
+            let touches = ids.contains(&subject) || change.referenced_ids().iter().any(|r| ids.contains(r));
             if touches && self.change_visible(principal, change)? {
                 let position = out.len() + 1;
                 out.push(self.project_event(principal, event, position)?);

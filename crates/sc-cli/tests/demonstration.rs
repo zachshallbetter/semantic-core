@@ -146,7 +146,7 @@ fn stage_one_demonstration() {
     let why = cli.ok(&["why", &relationship]);
     assert!(why.contains("state PRESENT"), "{why}");
     assert!(why.contains("evidence note: bought together"), "{why}");
-    assert!(why.contains("assertion accepted under owner-local"), "{why}");
+    assert!(why.contains(&format!("assertion {assertion} accepted under owner-local")), "{why}");
     let why_json: serde_json::Value = serde_json::from_str(&cli.ok(&["why", &relationship, "--json"])).unwrap();
     assert_eq!(why_json["state"], "PRESENT");
 
@@ -157,9 +157,10 @@ fn stage_one_demonstration() {
     let why = cli.ok(&["why", &relationship]);
     assert!(why.contains("SUPPORTS retracted"), "{why}");
     assert!(why.contains("evidence note: bought together"), "{why}");
-    assert!(why.contains("assertion retracted (wrong appliance)"), "{why}");
+    assert!(why.contains(&format!("assertion {assertion} retracted (wrong appliance)")), "{why}");
     let history = cli.ok(&["history", &relationship]);
-    assert_eq!(history.lines().count(), 2, "{history}");
+    assert_eq!(history.lines().count(), 4, "{history}");
+    assert!(history.lines().filter(|l| l.contains(&format!("assertion {assertion}"))).count() >= 3, "{history}");
     assert!(why.lines().filter(|l| l.starts_with("  #")).count() >= 4, "{why}");
     assert!(cli.fails(&["retract", &assertion]).contains("already retracted"));
 
@@ -219,7 +220,7 @@ fn stage_one_demonstration() {
     ]);
     assert!(again.starts_with("applied 0 "), "{again}");
     let why = second.ok(&["why", &relationship]);
-    assert!(why.contains("assertion retracted (wrong appliance)"), "{why}");
+    assert!(why.contains(&format!("assertion {assertion} retracted (wrong appliance)")), "{why}");
     assert!(second.ok(&["verify"]).contains("chain intact"));
     assert!(cli.ok(&["verify"]).contains("chain intact"));
 

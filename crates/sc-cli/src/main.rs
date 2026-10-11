@@ -43,9 +43,12 @@ commands
   history <id>
   retract <assertion-id> [--reason <text>]
   export --out <file> --key-id <id> (--key-file <path> | --key-stdin)
-  import <file> --key-id <id> --verifying-key <hex> [--actor <name>]
+  import <file> --key-id <id> --verifying-key <hex> [--actor <name>] [--adopt-owner <name>]
                                the key is trusted for --actor (default: the file's exporter) only;
-                               accepted assertions arrive as proposals for the local authority
+                               accepted assertions arrive as proposals for the local authority;
+                               a file owned by someone else is refused unless --adopt-owner names
+                               that owner, and the re-basing is then recorded on every event
+  history <id>                 for a relationship, includes every assertion's events
   verify
 ";
 
@@ -352,6 +355,7 @@ fn run(args: &Args) -> Result<(), String> {
                         location,
                         content_hash: hash,
                         source: "sc move-resolve".into(),
+                        window: None,
                     },
                 )
                 .map_err(err)?;
@@ -436,7 +440,9 @@ fn run(args: &Args) -> Result<(), String> {
             let key = ed25519_dalek::VerifyingKey::from_bytes(&bytes).map_err(|e| e.to_string())?;
             let actor = args.flag("actor").unwrap_or(&interchange.exporter);
             let keys = TrustedKeys::new().trust(actor, key_id, key);
-            let report = store.import(&p, &interchange, &keys).map_err(err)?;
+            let report = store
+                .import(&p, &interchange, &keys, args.flag("adopt-owner"))
+                .map_err(err)?;
             println!(
                 "applied {} skipped {} acceptances withheld {} rebased {}",
                 report.applied, report.skipped, report.acceptances_withheld, report.rebased
@@ -531,11 +537,17 @@ fn describe_event(event: &Event) -> String {
         Change::PresentationRebound { .. } => "presentation re-bound".into(),
         Change::PresentationUnavailable { .. } => "presentation unavailable".into(),
         Change::RelationshipDeclared { relationship } => format!("relationship declared: {}", relationship.predicate),
-        Change::AssertionProposed { assertion } => format!("assertion proposed: {}", assertion.polarity.as_str()),
-        Change::QualificationRecorded { qualification, .. } => format!("qualification recorded: {}", qualification.as_str()),
-        Change::AssertionAccepted { authority, .. } => format!("assertion accepted under {authority}"),
-        Change::AssertionRetracted { reason, compensates, .. } => {
-            format!("assertion retracted ({reason}), compensates {compensates}")
+        Change::AssertionProposed { assertion } => {
+            format!("assertion {} proposed: {}", assertion.id, assertion.polarity.as_str())
+        }
+        Change::QualificationRecorded { assertion_id, qualification } => {
+            format!("assertion {assertion_id} qualification recorded: {}", qualification.as_str())
+        }
+        Change::AssertionAccepted { assertion_id, authority } => {
+            format!("assertion {assertion_id} accepted under {authority}")
+        }
+        Change::AssertionRetracted { assertion_id, reason, compensates } => {
+            format!("assertion {assertion_id} retracted ({reason}), compensates {compensates}")
         }
         Change::AudienceChanged { audience, .. } => format!("audience changed: {audience:?}"),
     };

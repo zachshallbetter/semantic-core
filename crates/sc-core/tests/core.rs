@@ -171,6 +171,7 @@ fn why_prints_the_rule_that_fired() {
                 location: location("vol-leo", "doc-2", "/Volumes/Leo/Warranty.pdf"),
                 content_hash: Some(hash("warranty-v1")),
                 source: "scan".into(),
+                window: None,
             },
         )
         .unwrap();

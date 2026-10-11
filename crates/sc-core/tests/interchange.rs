@@ -50,7 +50,7 @@ fn export_import_round_trip_is_idempotent_and_keeps_history() {
     let keys = trust(OWNER, "ava-key:2026", &signing);
 
     let mut target = fixed_store();
-    let first = target.import(&p, &parsed, &keys).unwrap();
+    let first = target.import(&p, &parsed, &keys, None).unwrap();
     assert_eq!(first.applied + first.acceptances_withheld, export.events.len());
     assert_eq!(first.acceptances_withheld, 1);
     assert_eq!(first.skipped, 0);
@@ -68,7 +68,7 @@ fn export_import_round_trip_is_idempotent_and_keeps_history() {
     assert_eq!(target.relationship_state(&p, &relationship_id).unwrap(), RelationshipState::Present);
 
     // Importing again changes nothing.
-    let second = target.import(&p, &parsed, &keys).unwrap();
+    let second = target.import(&p, &parsed, &keys, None).unwrap();
     assert_eq!(second.applied, 0);
     assert_eq!(second.skipped + second.acceptances_withheld, export.events.len());
     assert_eq!(second.acceptances_withheld, 1);
@@ -85,7 +85,7 @@ fn export_import_round_trip_is_idempotent_and_keeps_history() {
     // Re-exporting the target and importing into the source is also a no-op.
     let back = target.export(&p, "ava-key:2026", &signing).unwrap();
     let mut source = source;
-    let report = source.import(&p, &back, &keys).unwrap();
+    let report = source.import(&p, &back, &keys, None).unwrap();
     assert_eq!(report.applied, 0);
     assert_eq!(target.events(&p).unwrap().len(), events_after);
 }
@@ -100,7 +100,7 @@ fn source_event_time_survives_import() {
     target.set_clock(|| {
         time::OffsetDateTime::parse("2026-11-01T09:00:00Z", &time::format_description::well_known::Rfc3339).unwrap()
     });
-    target.import(&p, &export, &trust(OWNER, "k", &signing)).unwrap();
+    target.import(&p, &export, &trust(OWNER, "k", &signing), None).unwrap();
     let imported: Vec<Event> = target
         .events(&p)
         .unwrap()
@@ -127,18 +127,18 @@ fn import_verifies_every_signature_before_applying_anything() {
     let last = tampered.events.len() - 1;
     tampered.events[last].envelope.body.at = "2026-10-10T12:00:01Z".into();
     let mut target = fixed_store();
-    assert!(matches!(target.import(&p, &tampered, &keys), Err(Error::Interchange(_))));
+    assert!(matches!(target.import(&p, &tampered, &keys, None), Err(Error::Interchange(_))));
     assert_eq!(target.events(&p).unwrap().len(), 1, "nothing was applied");
 
     // Rotated key: the file signed by the old key does not verify under the new one.
     let rotated = key(4);
     assert!(matches!(
-        target.import(&p, &export, &trust(OWNER, "ava-key:2026", &rotated)),
+        target.import(&p, &export, &trust(OWNER, "ava-key:2026", &rotated), None),
         Err(Error::Interchange(_))
     ));
     // Re-signed under the rotated key it imports, and the ids are unchanged.
     let resigned = source.export(&p, "ava-key:2027", &rotated).unwrap();
-    target.import(&p, &resigned, &trust(OWNER, "ava-key:2027", &rotated)).unwrap();
+    target.import(&p, &resigned, &trust(OWNER, "ava-key:2027", &rotated), None).unwrap();
     for hit in source.search(&p, "").unwrap() {
         target.kind_of(&p, &hit.id).unwrap();
     }
@@ -153,7 +153,7 @@ fn keys_are_bound_to_actors() {
     let mut target = fixed_store();
     // The right key, trusted for a different actor: refused.
     let wrong_actor = trust("robin", "ava-key", &signing);
-    let error = target.import(&p, &export, &wrong_actor).unwrap_err();
+    let error = target.import(&p, &export, &wrong_actor, None).unwrap_err();
     assert!(error.to_string().contains("no trusted key for actor"), "{error}");
     // Two actors in one file, each with its own key; one event forged with
     // the other actor's key is refused whole.
@@ -166,11 +166,11 @@ fn keys_are_bound_to_actors() {
     let both = TrustedKeys::new()
         .trust(OWNER, "ava-key", signing.verifying_key())
         .trust("robin", "robin-key", robin_key.verifying_key());
-    let error = target.import(&p, &mixed, &both).unwrap_err();
+    let error = target.import(&p, &mixed, &both, None).unwrap_err();
     assert!(error.to_string().contains("by robin"), "{error}");
     assert_eq!(target.events(&p).unwrap().len(), 1);
     // Nothing trusted at all: refused.
-    assert!(target.import(&p, &export, &TrustedKeys::new()).is_err());
+    assert!(target.import(&p, &export, &TrustedKeys::new(), None).is_err());
 }
 
 #[test]
@@ -188,7 +188,7 @@ fn policy_events_are_refused_whole() {
     let policy = policy.envelope.sign("k", &signing).unwrap();
     export.events.push(policy);
     let mut target = fixed_store();
-    let error = target.import(&p, &export, &trust(OWNER, "k", &signing)).unwrap_err();
+    let error = target.import(&p, &export, &trust(OWNER, "k", &signing), None).unwrap_err();
     assert!(error.to_string().contains("policy"), "{error}");
     assert_eq!(target.events(&p).unwrap().len(), 1, "nothing before the policy event was applied either");
     assert_eq!(target.owner(), OWNER);
@@ -210,7 +210,7 @@ fn foreign_acceptance_arrives_as_a_proposal() {
         *signed = signed.envelope.sign("k", &signing).unwrap();
     }
     let mut target = fixed_store();
-    let report = target.import(&p, &foreign, &trust(OWNER, "k", &signing)).unwrap();
+    let report = target.import(&p, &foreign, &trust(OWNER, "k", &signing), None).unwrap();
     assert_eq!(report.acceptances_withheld, 1);
     let assertion = target.get_assertion(&p, &assertion_id).unwrap();
     assert_eq!(assertion.status, AssertionStatus::Proposed);
@@ -259,7 +259,14 @@ fn different_owners_rebase_onto_the_importer_and_record_the_source_owner() {
     let mut ava_library = fixed_store();
     let ava = owner();
     let keys = TrustedKeys::new().trust("robin", "robin-key", robin_key.verifying_key());
-    let report = ava_library.import(&ava, &export, &keys).unwrap();
+    // Without adopting the owner the file is refused whole; nothing lands.
+    let refused = ava_library.import(&ava, &export, &keys, None).unwrap_err();
+    assert!(refused.to_string().contains("adopt-owner"), "{refused}");
+    assert_eq!(ava_library.events(&ava).unwrap().len(), 1);
+    let wrong = ava_library.import(&ava, &export, &keys, Some("hale")).unwrap_err();
+    assert!(matches!(wrong, Error::Interchange(_)), "{wrong}");
+    assert_eq!(ava_library.events(&ava).unwrap().len(), 1);
+    let report = ava_library.import(&ava, &export, &keys, Some("robin")).unwrap();
     assert!(report.rebased >= 4, "{report:?}");
     // Everything imported is owned by the importer, and the source owner is on the event.
     let imported_thing = ava_library.get_thing(&ava, &thing.id).unwrap();
@@ -316,7 +323,7 @@ fn import_preserves_referential_integrity() {
         )
     });
     let mut target = fixed_store();
-    let error = target.import(&p, &export, &trust(OWNER, "ava-key:2026", &signing)).unwrap_err();
+    let error = target.import(&p, &export, &trust(OWNER, "ava-key:2026", &signing), None).unwrap_err();
     assert!(matches!(error, Error::Interchange(_)), "{error}");
     assert!(error.to_string().contains("references"));
     assert_eq!(target.events(&p).unwrap().len(), 1, "all or nothing");
@@ -350,7 +357,7 @@ fn a_verified_signature_does_not_change_trust_class() {
         signed.verify("ava-key", &signing.verifying_key()).unwrap();
     }
     let mut target = fixed_store();
-    target.import(&p, &export, &trust(OWNER, "ava-key", &signing)).unwrap();
+    target.import(&p, &export, &trust(OWNER, "ava-key", &signing), None).unwrap();
     let imported = target.get_instance(&p, &external.id).unwrap();
     assert_eq!(imported.trust_class, "external");
     assert_eq!(imported.provenance, sc_envelope::ProvenanceKind::Declared);
@@ -371,7 +378,7 @@ fn export_is_the_only_place_signatures_appear() {
     }
     let mut target = fixed_store();
     assert!(matches!(
-        target.import(&Principal::solo("robin"), &export, &trust(OWNER, "ava-key:2026", &signing)),
+        target.import(&Principal::solo("robin"), &export, &trust(OWNER, "ava-key:2026", &signing), None),
         Err(Error::Unauthorized(_))
     ));
 }

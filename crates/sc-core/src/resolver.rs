@@ -19,6 +19,9 @@ pub struct Seen {
     pub location: Location,
     pub content_hash: Option<String>,
     pub source: String,
+    /// The source's own `(observed_at, expires_at)` window. `None` means the
+    /// sighting is happening now, and the store clock supplies the window.
+    pub window: Option<(String, String)>,
 }
 
 impl Store {
@@ -92,7 +95,10 @@ impl Store {
         if let Some(hash) = &seen.content_hash {
             sc_envelope::require_sha256("content_hash", hash)?;
         }
-        let (observed_at, expires_at) = self.observation_window();
+        let (observed_at, expires_at) = match &seen.window {
+            Some((observed_at, expires_at)) => (observed_at.clone(), expires_at.clone()),
+            None => self.observation_window(),
+        };
         let observation = Observation {
             id: Self::new_id(),
             kind: ObservationKind::Seen,
@@ -116,6 +122,30 @@ impl Store {
             candidates: vec![],
             content_changed: false,
         };
+
+        // Freshness binds here, against the store clock: an observation
+        // outside its window may not drive a resolution. It is still recorded.
+        let now = self.now_time();
+        let observed = sc_envelope::parse_timestamp("observation.observed_at", Some(&observation.observed_at))?;
+        let expires = sc_envelope::parse_timestamp("observation.expires_at", Some(&observation.expires_at))?;
+        if expires <= observed {
+            return Err(sc_envelope::ValidationError::InvalidFreshnessWindow.into());
+        }
+        if now >= expires || now < observed {
+            let status = if now >= expires { "expired" } else { "not-yet-valid" };
+            evidence.push(Evidence::new(
+                "freshness",
+                format!(
+                    "{status}: observed_at {} expires_at {} checked at {}; the sighting is inadmissible and drives nothing",
+                    observation.observed_at,
+                    observation.expires_at,
+                    self.now()
+                ),
+            ));
+            evidence.push(Evidence::new("no-match", "no admissible evidence; nothing was consulted"));
+            let resolution = base(Outcome::Unresolved, Rule::NoMatch, evidence);
+            return self.record_observation(principal, observation, resolution);
+        }
 
         // Rule 1: the within-volume key.
         let keyed = self.instances_where(

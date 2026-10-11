@@ -37,7 +37,7 @@ ownership / licensing   public repository, MIT OR Apache-2.0; commits authored b
 privacy / data          single local owner, private by default, no implicit sharing; fixtures use fictional names only
 security                access enforced before traversal, counts, search, export and surfaces; file contents and
                         model outputs are untrusted data; secrets never on argv
-cost                    no mandatory account, server, cloud sync or model; cloud sessions build the Rust core
+cost                    no mandatory account, server, cloud sync or model; the Rust core builds and tests on Linux CI, the Swift package on macOS
 platform                macOS 27 SDK verified; Mac indexes, iOS reads; Swift package over a Rust core
 human authority         acceptance of an assertion requires separate authority; qualification cannot self-promote
 protocols               RSP envelope discipline, EQP qualification, FCI distinctions, SSS/SES boundaries, ICP for

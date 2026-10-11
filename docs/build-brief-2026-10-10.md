@@ -1,7 +1,7 @@
 # Semantic Core — build brief
 
 **Date:** 2026-10-10
-**Status:** Started 2026-10-10. Repository: https://github.com/zachshallbetter/semantic-core (public). Task 1 done on main; tasks 2 to 7 in progress on branch `stage1-rust-core` from a cloud session. Everything below was answered by Zach on 2026-10-10.
+**Status:** Started 2026-10-10. Repository: https://github.com/zachshallbetter/semantic-core (public). Task 1 done on main; tasks 2 to 7 in progress on branch `stage1-rust-core`. Everything below was answered by Zach on 2026-10-10.
 **Definition of record:** [semantic-core-definition-v0.2.2.md](semantic-core-definition-v0.2.2.md)
 **History:** [thought-experiment-2026-10-10.md](thought-experiment-2026-10-10.md)
 
@@ -13,8 +13,8 @@
 | Repo | New standalone repo `semantic-core`. The existing `~/Projects/semantic-core/docs` becomes its docs folder. |
 | Reflective Rust | Vendor the envelope rules in-tree. No path dependency on the unpublished crates. Pin the RR golden vector as a conformance fixture. |
 | First surface | CLI plus fixtures first. Finder Sync action and the companion inspector are Stage 2. |
-| Execution | Cloud session for the Rust core, fixtures and CI. Mac session only for the Swift package, Finder Sync, the inspector and anything under the build lock. |
-| Repo policy | Public. Commits as Zach. No Co-Authored-By trailers, no AI mentions anywhere in commits, PRs, docs or code, the same rule as reflective-rust and reflective-index. |
+| Execution | The Rust core, fixtures and CI build anywhere Linux runs. The Mac is reserved for the Swift package, Finder Sync, the inspector and anything under the build lock. |
+| Repo policy | Public. Commits authored by the owner, the same convention as reflective-rust. |
 | Governance | Formal Project Bootstrap v0.6.0 templates at repo creation: project intent, project profile, authority. Register `sc-event` in the protocol registry only once a conformance command actually runs. |
 | Stage 1 scope | The nine proofs and fixture list in v0.2.2 section 11, plus three additions: the Swift golden-vector proof stays in Stage 1; Peel archive-member fixtures from a static ZIP, no PeelFS mount required; a Spotlight `IndexedEntity` spike with the non-disclosure test. |
 

@@ -93,7 +93,7 @@ fn mount_all(epoch: u64) -> Mounted {
                     &container_revision.id,
                     member.clone(),
                     MountLocator {
-                        volume_entity: "peelfs-volume-1".into(),
+                        volume_entity: "archive-volume-1".into(),
                         item_id: 2 + index as u64,
                         mount_epoch: epoch,
                     },
@@ -138,7 +138,7 @@ fn presentation_lifecycle_unmount_and_remount_rebinds_through_the_member() {
     let instances_before = count_rows(&mounted.store, "instances");
 
     // Unmount: every presentation becomes unavailable; nothing is created or deleted.
-    let unavailable = mounted.store.unmount(&p, "peelfs-volume-1", 1).unwrap();
+    let unavailable = mounted.store.unmount(&p, "archive-volume-1", 1).unwrap();
     assert_eq!(unavailable.len(), 3);
     for presentation in &unavailable {
         assert_eq!(presentation.status, PresentationStatus::Unavailable);
@@ -160,7 +160,7 @@ fn presentation_lifecycle_unmount_and_remount_rebinds_through_the_member() {
                     &mounted.container_revision,
                     member.clone(),
                     MountLocator {
-                        volume_entity: "peelfs-volume-1".into(),
+                        volume_entity: "archive-volume-1".into(),
                         item_id: 40 + index as u64,
                         mount_epoch: 2,
                     },
@@ -254,7 +254,7 @@ fn extracted_member_is_a_distinct_derived_instance() {
     assert_eq!(resolution.instance_id.as_deref(), Some(instance.id.as_str()));
 
     // Extraction needs an available presentation.
-    mounted.store.unmount(&p, "peelfs-volume-1", 1).unwrap();
+    mounted.store.unmount(&p, "archive-volume-1", 1).unwrap();
     let manual = &mounted.presentations[1];
     assert!(matches!(
         mounted

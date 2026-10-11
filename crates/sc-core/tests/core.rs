@@ -194,9 +194,9 @@ fn vocabulary_rules_apply_on_insert() {
         Err(Error::Vocab(_))
     ));
     // Extension predicate: accepted and materialized.
-    let ext = store.declare_relationship(&p, "x-peel:MEMBER_OF", &artifact, &thing).unwrap();
+    let ext = store.declare_relationship(&p, "x-archive:MEMBER_OF", &artifact, &thing).unwrap();
     assert!(ext.materializes);
-    assert_eq!(ext.predicate, "x-peel:MEMBER_OF");
+    assert_eq!(ext.predicate, "x-archive:MEMBER_OF");
     store.propose_assertion(&p, &ext.id, Polarity::Supports, vec![]).unwrap();
     // Unknown predicate: preserved as a value, never materialized.
     let unknown = store.declare_relationship(&p, "OWNS", &artifact, &thing).unwrap();
@@ -208,7 +208,7 @@ fn vocabulary_rules_apply_on_insert() {
         .into_iter()
         .map(|v| v.label)
         .collect();
-    assert_eq!(labels, ["DOCUMENTED_BY", "x-peel:MEMBER_OF"]);
+    assert_eq!(labels, ["DOCUMENTED_BY", "x-archive:MEMBER_OF"]);
     // Still inspectable by id.
     assert_eq!(store.get_relationship(&p, &unknown.id).unwrap().vocab_version, "sc-vocab-1");
     assert_eq!(store.relationship_state(&p, &unknown.id).unwrap(), RelationshipState::Unknown);

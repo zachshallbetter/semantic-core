@@ -181,7 +181,7 @@ pub fn registry() -> &'static [Definition] {
 pub enum Predicate {
     /// A member of the registry.
     Registered(Registered),
-    /// A namespaced extension such as `x-peel:MEMBER_OF`. Accepted, not
+    /// A namespaced extension such as `x-archive:MEMBER_OF`. Accepted, not
     /// class-checked, materialized.
     Extension { namespace: String, name: String },
     /// An unregistered, un-namespaced predicate preserved as a value. Never
@@ -365,14 +365,14 @@ mod tests {
 
     #[test]
     fn extensions_are_accepted_and_unknowns_preserved() {
-        let peel = Predicate::parse("x-peel:MEMBER_OF").unwrap();
+        let ext = Predicate::parse("x-archive:MEMBER_OF").unwrap();
         assert_eq!(
-            peel,
-            Predicate::Extension { namespace: "peel".into(), name: "MEMBER_OF".into() }
+            ext,
+            Predicate::Extension { namespace: "archive".into(), name: "MEMBER_OF".into() }
         );
-        assert!(peel.materializes());
-        peel.check(Thing, Thing).unwrap();
-        assert_eq!(peel.as_value(), "x-peel:MEMBER_OF");
+        assert!(ext.materializes());
+        ext.check(Thing, Thing).unwrap();
+        assert_eq!(ext.as_value(), "x-archive:MEMBER_OF");
 
         let unknown = Predicate::parse("OWNS").unwrap();
         assert_eq!(unknown, Predicate::Unknown("OWNS".into()));
@@ -381,7 +381,7 @@ mod tests {
         assert_eq!(Predicate::parse("x-unknown:OWNS").unwrap(), unknown);
 
         assert_eq!(Predicate::parse(""), Err(VocabError::Empty));
-        assert!(matches!(Predicate::parse("x-peel"), Err(VocabError::MalformedExtension(_))));
+        assert!(matches!(Predicate::parse("x-archive"), Err(VocabError::MalformedExtension(_))));
         assert!(matches!(Predicate::parse("x-:NAME"), Err(VocabError::MalformedExtension(_))));
         assert!(matches!(Predicate::parse("has space"), Err(VocabError::MalformedExtension(_))));
     }

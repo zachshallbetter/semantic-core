@@ -487,7 +487,17 @@ impl Store {
         })
     }
 
+    /// Inspect an identifier as the principal sees it. Anyone but the owner
+    /// receives the records with ownership and audience withheld.
     pub fn inspect(&self, principal: &Principal, id: &str) -> Result<Inspection> {
+        let mut inspection = self.inspect_unredacted(principal, id)?;
+        if principal.actor != self.owner() {
+            inspection.redact();
+        }
+        Ok(inspection)
+    }
+
+    fn inspect_unredacted(&self, principal: &Principal, id: &str) -> Result<Inspection> {
         Ok(match self.kind_of(principal, id)? {
             Kind::Entity(EntityClass::Thing) => Inspection::Thing {
                 thing: self.get_thing(principal, id)?,
@@ -522,6 +532,46 @@ impl Store {
             },
             Kind::Observation => return Err(Error::NotFound(id.to_string())),
         })
+    }
+}
+
+impl Inspection {
+    /// Strip every owner and audience from the inspection.
+    pub fn redact(&mut self) {
+        fn views(views: &mut [RelationshipView]) {
+            for view in views {
+                view.relationship.access.redact();
+            }
+        }
+        match self {
+            Inspection::Thing { thing, relationships } => {
+                thing.access.redact();
+                views(relationships);
+            }
+            Inspection::Artifact { artifact, revisions, instances, relationships } => {
+                artifact.access.redact();
+                revisions.iter_mut().for_each(|r| r.access.redact());
+                instances.iter_mut().for_each(|i| i.access.redact());
+                views(relationships);
+            }
+            Inspection::Revision { revision, relationships } => {
+                revision.access.redact();
+                views(relationships);
+            }
+            Inspection::Instance { instance, relationships, .. } => {
+                instance.access.redact();
+                views(relationships);
+            }
+            Inspection::Presentation { presentation, relationships } => {
+                presentation.access.redact();
+                views(relationships);
+            }
+            Inspection::Relationship { relationship, assertions, .. } => {
+                relationship.access.redact();
+                assertions.iter_mut().for_each(|a| a.access.redact());
+            }
+            Inspection::Assertion { assertion } => assertion.access.redact(),
+        }
     }
 }
 

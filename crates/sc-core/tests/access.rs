@@ -259,3 +259,38 @@ fn derived_objects_inherit_the_most_private_audience() {
         0
     );
 }
+
+#[test]
+fn inspections_for_other_principals_withhold_owner_and_audience() {
+    let built = build();
+    let dishwasher = built.id("dishwasher");
+    let owner_view = serde_json::to_string(&built.store.inspect(built.principal("ava"), &dishwasher).unwrap()).unwrap();
+    assert!(owner_view.contains("\"owner\":\"ava\""));
+    assert!(owner_view.contains("adults"));
+    for name in ["robin", "leo"] {
+        let inspection = built.store.inspect(built.principal(name), &dishwasher).unwrap();
+        let text = serde_json::to_string(&inspection).unwrap();
+        assert!(!text.contains("\"ava\""), "{name}: {text}");
+        assert!(!text.contains("\"owner\""), "{name}: {text}");
+        for label in ["adults", "kids"] {
+            assert!(!text.contains(label), "{name}: {text}");
+        }
+        // Still the right thing with its visible edges.
+        match inspection {
+            Inspection::Thing { thing, relationships } => {
+                assert_eq!(thing.label, "Dishwasher");
+                assert!(thing.access.owner.is_empty());
+                assert!(!relationships.is_empty());
+                assert!(relationships.iter().all(|v| v.relationship.access.audience.is_empty()));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+    // Every inspection kind is redacted, not just things.
+    let manual = built.id("manual.artifact");
+    let text = serde_json::to_string(&built.store.inspect(built.principal("robin"), &manual).unwrap()).unwrap();
+    assert!(!text.contains("\"owner\"") && !text.contains("adults"), "{text}");
+    let edge = built.id("manual-documents");
+    let text = serde_json::to_string(&built.store.inspect(built.principal("leo"), &edge).unwrap()).unwrap();
+    assert!(!text.contains("\"owner\"") && !text.contains("kids"), "{text}");
+}

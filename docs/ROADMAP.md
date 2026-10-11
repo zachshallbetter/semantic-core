@@ -15,7 +15,7 @@ The verdict model, the envelope reference and its golden vector, and the macOS 2
 5. `sc-cli`: link, move-resolve, inspect, retract, export, import, why.
 6. Container fixtures from a ZIP built at test time: member identity, presentation lifecycle, extracted instances.
 7. Access fixtures: restricted direct, transitive, count, search, export; withheld never reveals existence.
-8. `sc-ffi` and the Swift package: the golden vector and signature verification reproduced across the boundary.
+8. `sc-ffi` and the Swift package: the golden vector and signature verification reproduced across the boundary. Implemented and tested: `crates/sc-ffi` (envelope and store C ABI) and `swift/SemanticCore` (golden vector both ways, CryptoKit verification, Stage 1 demonstration through the Swift store).
 9. A Spotlight indexed-entity spike with the non-disclosure test.
 
 Stage 1 is complete when the nine proofs in the definition and the fixture list are green in CI.

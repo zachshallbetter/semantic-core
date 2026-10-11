@@ -1,0 +1,11 @@
+[package]
+name = "sc-vocab"
+description = "sc-vocab-1 relationship vocabulary: registered predicates, class constraints, inverses, unknown-predicate preservation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true

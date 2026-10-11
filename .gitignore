@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+/swift/SemanticCore/.build
+*.sqlite
+*.sqlite-journal
+.DS_Store

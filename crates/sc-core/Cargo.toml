@@ -1,0 +1,18 @@
+[package]
+name = "sc-core"
+description = "Semantic Core: identities (thing, artifact, revision, instance, presentation), relationships, assertions, observations, hash-chained event log, SQLite materialization, resolver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sc-envelope = { path = "../sc-envelope" }
+sc-vocab = { path = "../sc-vocab" }
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+ulid.workspace = true
+time.workspace = true
+sha2.workspace = true
+thiserror.workspace = true

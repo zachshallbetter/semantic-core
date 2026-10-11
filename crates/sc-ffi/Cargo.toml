@@ -1,0 +1,12 @@
+[package]
+name = "sc-ffi"
+description = "C ABI over sc-core for the Swift package"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sc-core = { path = "../sc-core" }
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]

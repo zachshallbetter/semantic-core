@@ -1,0 +1,18 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --workspace --locked || cargo build --workspace
+      - run: cargo test --workspace
+  swift:
+    runs-on: macos-latest
+    if: ${{ hashFiles('swift/SemanticCore/Package.swift') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test --package-path swift/SemanticCore

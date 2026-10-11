@@ -5,7 +5,7 @@
 **Status:** Design definition; not an implementation or conformance claim. **Not started.** Stage 0 has not begun; this revision answers the open decisions of v0.2.1 with evidence from the installed macOS 27.0 SDK, the Reflective Rust crates, and the SSS corpus.
 **Supersedes:** [v0.2.1](semantic-core-definition-v0.2.1.md) and [v0.2.0](semantic-core-definition-v0.2.0.md), kept for history  
 **Initial host:** macOS  
-**Portable consumers:** Finder integration, Jellybean, ASE, Peel, Titan, Fundamental Engine, and future applications
+**Portable consumers:** Finder integration, a household assistant and its apps, a code editor, an archive utility, Fundamental Engine, and future applications
 
 ## 1. Definition
 
@@ -88,7 +88,7 @@ Filesystem / content observation
 | EQP qualification | `PASS`, `BLOCKED`, `INCONCLUSIVE`, `NOT_RUN` | What claim does this evidence justify? | A qualification record for a candidate and claim |
 | Commitment gate (Distance from Gray v1.0) | `PASS`, `FAIL`, `ESCALATE` over a per-property vector of `SATISFIED`, `VIOLATED`, `GRAY` | May this commitment proceed under its pinned requirements, on the evidence admissible by its clock? | A declared commitment such as accepting an assertion, exporting a graph, or sharing a thing. Never an edge. |
 
-The formal model of record is `judgment-machines/books/01-the-last-undo/measurement/formal-model.md`, version 1.0, ratified 2026-08-30. Its rules that bind here: the required set is derived from the commitment and its use, never from the artifact; GRAY routes to ESCALATE and never to silence; authority may establish a judgment-bearing property through a recorded resolution but cannot manufacture a missing fact; the receipt carries the verdict and state vector. Placing `SATISFIED` on a relationship as an intrinsic property contradicts this model.
+The formal model of record is the Distance from Gray formal model, version 1.0, ratified 2026-08-30 (a separate document, not yet published). Its rules that bind here: the required set is derived from the commitment and its use, never from the artifact; GRAY routes to ESCALATE and never to silence; authority may establish a judgment-bearing property through a recorded resolution but cannot manufacture a missing fact; the receipt carries the verdict and state vector. Placing `SATISFIED` on a relationship as an intrinsic property contradicts this model.
 
 **Identity resolution is not EQP qualification.** `RESOLVED` does not imply `PASS`; `AMBIGUOUS` does not necessarily imply `INCONCLUSIVE`; `UNRESOLVED` does not automatically imply `BLOCKED`. EQP's `PASS`, `BLOCKED`, `INCONCLUSIVE`, and `NOT_RUN` retain their separate meanings when an EQP-compatible qualification profile is actually used.
 
@@ -136,15 +136,13 @@ These are **design references and adapter boundaries**, not mandatory runtime de
 | **IEPE v0.2.0 / RDP v0.1.0** | Engineering evidence, release/promotion and research claim discipline | Product runtime dependencies |
 | **Fundamental Engine** | Optional fields, forces, metrics, spatial interaction and visualization | Evidence adjudicator or owner of canonical assertions |
 
-The October 9 protocol bundle is a generated projection; its canonical source files retain authority. The protocol register is dated August 30 and does not prove current implementation maturity. The bundle also contains duplicated recipient/engagement material under `rcp.txt` and `edp.txt`; do not treat those as separate established dependencies.
-
 ### SSS/SES boundary (critical revision)
 
 **Canonical graph -> access projection -> SSS semantic surface resolution -> SES/host expression -> user-visible interface.**
 
 SSS asks: *Given available semantic state and a declared situation, what semantic surface is warranted here?* Its resolver is read-only with respect to canonical state. Access projection occurs **before** participation resolution. Context changes selection/emphasis, not meaning. Every included member needs an inspectable participation basis. Relationship presence does not imply causal coupling. Exposing an operation does not imply it is permitted, enabled, or executed.
 
-SES protects the meaning across Finder badges, Jellybean cards, ASE task views, Quick Look previews, and Fundamental Engine visualizations. Neither SSS nor SES owns graph truth.
+SES protects the meaning across Finder badges, assistant cards, editor task views, Quick Look previews, and Fundamental Engine visualizations. Neither SSS nor SES owns graph truth.
 
 A **projection contract** should record source scope, principal/capabilities, preserved/transformed/omitted/introduced information, provenance, and failure/withholding semantics. A filtered result must never imply a restricted relationship does not exist.
 
@@ -175,7 +173,7 @@ The earlier discussion identified App Intents entity schemas and view annotation
 | Local model runtime | Compare deterministic matching to model-assisted candidates | Measured precision/recall and false-merge rate |
 | Evaluation tools | Run ambiguous, contradictory, unreadable, restricted fixtures | Failures and abstentions remain explicit |
 | File Provider | Expose a bounded managed semantic collection | No assumption of global Finder view control |
-| DiskImageKit / Peel | Determine actual supported image operations | No unsupported archive-format claims |
+| DiskImageKit / archive mounts | Determine actual supported image operations | No unsupported archive-format claims |
 
 ## 9. Security and authority
 
@@ -195,13 +193,13 @@ The earlier discussion identified App Intents entity schemas and view annotation
 | Consumer | Role | Boundary |
 |---|---|---|
 | Finder | Native file navigation and explicit semantic actions | No canonical graph ownership or custom embedded inspector |
-| Jellybean | Household-oriented, access-scoped entity and document cards/actions | No authority inferred from discovery |
-| ASE | Task-scoped evidence and file relationships | No unrestricted filesystem access |
-| Peel | Archive/container-member observations and associations; PeelFS mounts | A mounted member is a presentation, not an instance; extraction creates a new instance with `DERIVED_FROM` provenance |
-| Titan | Operational observations and explicitly federated references | No implicit personal-file access |
+| Household assistant apps | Access-scoped entity and document cards and actions | No authority inferred from discovery |
+| Code editor | Task-scoped evidence and file relationships | No unrestricted filesystem access |
+| Archive utility | Archive and container-member observations and associations; read-only mounts | A mounted member is a presentation, not an instance; extraction creates a new instance with `DERIVED_FROM` provenance |
+| Household assistant host | Operational observations and explicitly federated references | No implicit personal-file access |
 | Fundamental Engine | Optional spatial computation and visualization | No truth adjudication or assertion acceptance |
 
-### Containers and mounts (PeelFS case)
+### Containers and mounts (read-only archive mount case)
 
 | Object | Treatment |
 |---|---|
@@ -245,7 +243,7 @@ Implement a narrowly scoped EQP-compatible qualification profile with mutation t
 
 ### Stage 4 — Optional ecosystem adapters
 
-Introduce Fundamental Engine spatial view, Jellybean cards, ASE task projections, Peel archive observations, Titan interoperability, and eventually authorized cross-device exchange. Keep ontology and authority boundaries explicit.
+Introduce the Fundamental Engine spatial view, assistant cards, editor task projections, archive observations, host interoperability, and eventually authorized cross-device exchange. Keep ontology and authority boundaries explicit.
 
 ## 12. Required conformance fixtures
 
@@ -271,7 +269,7 @@ Answered 2026-10-10 against the installed macOS 27.0 SDK (`MacOSX.sdk`, build 26
 
 **Why not carry file-graph bodies inside `rr-rsp-0.1`.** `DescriptorBody` is a closed tagged enum of `type`, `runtime`, `observation`, `operational-graph`, and `validate()` rejects any other `schema_version`. Adding a body kind means forking or changing the crate, and the crate is unpublished. A sibling protocol keeps the envelope rules identical while leaving the crate alone.
 
-**Conformance path.** The Swift implementation first reproduces the crate's golden vector exactly: subject `rust:type:Empty`, schema `type-1`, provenance `derived` from `reflective-rust-conformance`, source hash `sha256:503e43da…`, public access, empty struct body, expected hash `sha256:7c98ac356aa59dd29e466c6f6e5927eb5afd2ad85f283d59d920de3f7bf05a18`. That proves JCS, hashing and signing agree. Only then does `sc-event-0.1` get its own vectors.
+**Conformance path.** The Swift implementation first reproduces the crate's golden vector exactly: subject `rust:type:Empty`, schema `type-1`, provenance `derived` from `reflective-rust-conformance`, source hash `sha256:503e43da…`, public access, empty struct body, expected hash `sha256:7c98ac356aa59dd29e466c6f6e5927eb5afd2ad85f283d59d920de3f7bf05a18`. That proves JCS, hashing and signing agree. An absent `layout` is omitted from the body, not serialized as null; only the omitting form reaches the recorded hash. An absent `layout` is omitted from the body, not serialized as null; only the omitting form reaches the recorded hash. Only then does `sc-event-0.1` get its own vectors.
 
 **Observation rule carried over.** An `observed` event must carry `observed_at` and `expires_at`, with expiry later than observation; `declared`, `derived` and `compiler-certified` events must not. Expired observations may be kept and must not drive current-state decisions.
 
@@ -293,13 +291,13 @@ Inode, resource identifier, name, size, modification time, an xattr stamp and an
 
 **Decision.** Predicates live in a registry versioned as `sc-vocab-<n>`. Every relationship carries its predicate and the vocabulary version it was written under. Adding a predicate is a minor bump; renaming or removing one is a major bump with a recorded mapping. Each predicate declares direction, source and target classes and an inverse where one exists, and the library checks the class constraints on insert.
 
-**Extension.** Namespaced predicates such as `x-peel:MEMBER_OF` are accepted without a registry change and are never promoted into the core vocabulary without a bump and a mapping. This is Reflective Rust's lane rule applied to predicates: crossing from an extension into the core requires explicit reification.
+**Extension.** Namespaced predicates such as `x-archive:MEMBER_OF` are accepted without a registry change and are never promoted into the core vocabulary without a bump and a mapping. This is Reflective Rust's lane rule applied to predicates: crossing from an extension into the core requires explicit reification.
 
 **Interchange.** Because the envelope rejects unknown fields, an unregistered predicate on import is preserved as a value, `predicate: "x-unknown:…"` with its original vocabulary version, excluded from materialization until mapped, and never dropped.
 
 ### D4. Signatures: hash-chained locally, signed at the boundary
 
-**Decision.** The local operation log stores unsigned envelopes; each event carries the canonical hash of its predecessor, so local integrity is a hash chain. Signing with the owner's key happens at every boundary where an envelope leaves the device: export, share, federation, or a consumer on another machine. Events that arrive from a different actor, such as an agent or titan, must be signed by that actor's key before they enter the log, because the log is the trust boundary for foreign assertions.
+**Decision.** The local operation log stores unsigned envelopes; each event carries the canonical hash of its predecessor, so local integrity is a hash chain. Signing with the owner's key happens at every boundary where an envelope leaves the device: export, share, federation, or a consumer on another machine. Events that arrive from a different actor, such as an assistant or a host, must be signed by that actor's key before they enter the log, because the log is the trust boundary for foreign assertions.
 
 **Why.** RSP itself separates `DescriptorEnvelope` from `AuthenticatedEnvelope`, and signing every local write with a key that sits beside the database proves nothing the hash chain does not. The decision is a design judgment, not a verified constraint.
 
@@ -311,11 +309,11 @@ Inode, resource identifier, name, size, modification time, an xattr stamp and an
 
 ### D6. Access model: audience sets, projected to levels only at interchange
 
-**Decision.** Every object carries an owner and an audience set, the model titan already uses, because household audiences are not totally ordered: kids and adults are not nested. RSP's ordered access levels, `public < member < owner < administrator`, are a disclosure projection, so they are applied only when an envelope leaves the device: owner-only maps to `owner`, any household audience to `member`, external to `public`. Stage 1 has one policy record whose only authority is `owner-local`; every mutation names an authority reference even when that is the only value. Federation later adds signed share edges as authority grants without changing the schema. Derived objects inherit the most private audience among their sources.
+**Decision.** Every object carries an owner and an audience set, the model a household assistant needs, because household audiences are not totally ordered: kids and adults are not nested. RSP's ordered access levels, `public < member < owner < administrator`, are a disclosure projection, so they are applied only when an envelope leaves the device: owner-only maps to `owner`, any household audience to `member`, external to `public`. Stage 1 has one policy record whose only authority is `owner-local`; every mutation names an authority reference even when that is the only value. Federation later adds signed share edges as authority grants without changing the schema. Derived objects inherit the most private audience among their sources.
 
 ### D7. Presentation identity: session-scoped, re-bound through the member
 
-**Evidence.** FSKit's `FSItemID` is a per-volume 64-bit value the extension assigns; the header says to provide a unique identifier like an inode number. PeelFS assigns these from a counter starting after the root directory, so they are not stable across mounts. `FSEntityIdentifier` is a UUID per container or volume with an optional eight-byte qualifier; PeelFS uses one constant volume UUID.
+**Evidence.** FSKit's `FSItemID` is a per-volume 64-bit value the extension assigns; the header says to provide a unique identifier like an inode number. A read-only archive-mount extension that assigns these from a counter starting after the root directory yields ids that are not stable across mounts. `FSEntityIdentifier` is a UUID per container or volume with an optional eight-byte qualifier; such an extension may use one constant volume UUID.
 
 **Decision.** A presentation gets a session-scoped identifier, `(volume entity UUID, item id, mount epoch)`, with a validity window. Re-binding on remount is done through the durable identity of the contained member, keyed by `(container artifact revision, member path, member size and checksum)`, never through the item id. The same rule applies to DiskImageKit attachments, package contents and remote volumes. The two identities are kept apart because they answer different questions: "what is this" and "where can I read it right now".
 
@@ -327,7 +325,7 @@ Inode, resource identifier, name, size, modification time, an xattr stamp and an
 | Core Spotlight | Present | Index artifacts and things with access checked before indexing |
 | Foundation Models | Present, with macOS 26 and macOS 27 API families; `LanguageModel`, `Tool`, `Generable`, `Attachment` protocols and types | Model-assisted candidate proposals are possible on-device; outputs remain proposals with `derived` provenance |
 | Vision | Present | Serial-number and document extraction as observations |
-| FSKit | Present; `FSEntityIdentifier`, `FSItemID` as above | PeelFS and any future managed mount follow D7 |
+| FSKit | Present; `FSEntityIdentifier`, `FSItemID` as above | Archive mounts and any future managed mount follow D7 |
 | DiskImageKit | Present; ASIF and RAW creation configurations, `OpenConfiguration`, format and block-size enums; no attach API seen in the module interface | Image creation and open are verifiable; attach semantics remain to be checked |
 | "Evaluations" | No such framework in the SDK | Dropped as a track; evaluation is this project's own fixture suite |
 
@@ -362,4 +360,4 @@ The first product proof is deliberately modest: a relationship survives a justif
 
 **Changes from v0.2.0:** relationship and assertion identities separated; presentation added for mounted and virtual locations; trust class added and separated from provenance, integrity, and authority; three decision vocabularies tabulated with the Distance from Gray v1.0 model cited by path; RSP protocol facts recorded; single-owner default stated; container and mount treatment added; reserved names for episode, time facets, and known absence; fixtures extended; open decision 7 closed and replaced.
 
-**Source basis:** October 9, 2026 generated protocol bundle (`sss.txt`, `ses.txt`, `eqp.txt`, `icp.txt`, `fci.txt`, `idx.txt` and related corpora), plus the supplied Semantic Core/Finder/Golden Gate architectural discussion. Proposed implementation choices are labeled as such and are **not** claims that the referenced protocols or macOS SDK integrations have been implemented or verified.
+**Source basis:** the protocol corpora named in section 6 and the architectural discussion recorded in the project's design history. Proposed implementation choices are labeled as such and are **not** claims that the referenced protocols or macOS SDK integrations have been implemented or verified.

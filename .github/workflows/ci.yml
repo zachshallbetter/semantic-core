@@ -14,10 +14,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Swift package tests (skipped until the package exists)
-        run: |
-          if [ -f swift/SemanticCore/Package.swift ]; then
-            swift test --package-path swift/SemanticCore
-          else
-            echo "no Swift package yet"
-          fi
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the sc-ffi static library
+        run: scripts/build-ffi.sh
+      - name: Swift package tests
+        run: swift test --package-path swift/SemanticCore

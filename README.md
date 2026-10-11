@@ -8,7 +8,7 @@ A receipt, a warranty, a manual and a service record can all refer to the same d
 
 ## Status
 
-Stage 1 Rust core implemented and tested: `sc-envelope`, `sc-vocab`, `sc-core` and `sc-cli` pass their fixtures under `cargo test --workspace`, and the Reflective Rust golden vector reproduces. `sc-ffi` and the Swift package are not started. Nothing in this repository is a conformance claim for any external protocol.
+Stage 1 Rust core implemented and tested: `sc-envelope`, `sc-vocab`, `sc-core` and `sc-cli` pass their fixtures under `cargo test --workspace`, and the Reflective Rust golden vector reproduces. `sc-ffi` (C ABI) and the Swift package `swift/SemanticCore` are implemented and tested: the golden vector reproduces through the FFI and independently in Swift, CryptoKit verifies the signed vector, and the Stage 1 demonstration runs through the Swift store. The Spotlight spike is not started. Nothing in this repository is a conformance claim for any external protocol.
 
 - [Definition v0.2.2](docs/semantic-core-definition-v0.2.2.md) is the architecture of record: ontology, decision boundaries, protocol responsibilities, macOS integration, security, stage plan, fixtures, and the nine answered design decisions.
 - [Roadmap](docs/ROADMAP.md) is the stage plan and task order.
@@ -23,7 +23,7 @@ crates/
                 observations, hash-chained event log, SQLite materialization, resolver
   sc-cli        sc: link, move-resolve, inspect, retract, export, import, why
   sc-ffi        C ABI for the Swift package
-swift/SemanticCore  Swift package over sc-ffi (Stage 1 golden-vector proof; Stage 2 Finder work)
+swift/SemanticCore  Swift package over sc-ffi: Envelope, Signature, Hash, JCS, Store; golden vector both ways
 fixtures/           moves, copies, edits, deletes, ambiguous, containers, access, vectors
 ```
 

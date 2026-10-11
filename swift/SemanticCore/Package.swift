@@ -8,7 +8,8 @@ let package = Package(
     name: "SemanticCore",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "SemanticCore", targets: ["SemanticCore"])
+        .library(name: "SemanticCore", targets: ["SemanticCore"]),
+        .library(name: "SemanticCoreSpotlight", targets: ["SemanticCoreSpotlight"]),
     ],
     targets: [
         .systemLibrary(name: "CSemanticCore", path: "Sources/CSemanticCore"),
@@ -24,6 +25,16 @@ let package = Package(
         .testTarget(
             name: "SemanticCoreTests",
             dependencies: ["SemanticCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .target(
+            name: "SemanticCoreSpotlight",
+            dependencies: ["SemanticCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "SemanticCoreSpotlightTests",
+            dependencies: ["SemanticCoreSpotlight"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

@@ -49,10 +49,14 @@ int32_t sc_store_open(const char *path, const char *owner, ScStore **out_store);
 void sc_store_close(ScStore *store);
 int32_t sc_store_add_thing(ScStore *store, const char *label, char **out_id);
 int32_t sc_store_add_file(ScStore *store, const char *path, const char *volume, const char *document, char **out_json);
+int32_t sc_store_set_audience(ScStore *store, const char *id, const char *audiences_json);
 int32_t sc_store_link(ScStore *store, const char *source_id, const char *predicate, const char *target_id, char **out_json);
 int32_t sc_store_resolve(ScStore *store, const char *path, const char *volume, const char *document, char **out_json);
 int32_t sc_store_gone(ScStore *store, const char *instance_id, char **out_json);
 int32_t sc_store_inspect(ScStore *store, const char *id, char **out_json);
+/* Inspect as another principal: actor plus a JSON array of audience labels;
+ * the core's access rule applies, withheld reads as absent. */
+int32_t sc_store_inspect_as(ScStore *store, const char *actor, const char *audiences_json, const char *id, char **out_json);
 int32_t sc_store_why(ScStore *store, const char *relationship_id, char **out_json);
 int32_t sc_store_history(ScStore *store, const char *id, char **out_json);
 int32_t sc_store_retract(ScStore *store, const char *assertion_id, const char *reason, char **out_json);

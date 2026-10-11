@@ -440,6 +440,21 @@ pub unsafe extern "C" fn sc_store_add_file(
     })
 }
 
+/// Replace an entity's audience set; `audiences_json` is a JSON array of labels.
+///
+/// # Safety
+/// Pointers follow the header's contract.
+#[no_mangle]
+pub unsafe extern "C" fn sc_store_set_audience(handle: *mut ScStore, id: *const c_char, audiences_json: *const c_char) -> i32 {
+    guard(|| {
+        let sc = store(handle)?;
+        let id = text(id, "id")?;
+        let audiences: std::collections::BTreeSet<String> = serde_json::from_str(text(audiences_json, "audiences_json")?)?;
+        sc.store.set_audience(&sc.principal, id, audiences)?;
+        Ok(())
+    })
+}
+
 #[derive(Serialize)]
 struct LinkRecord {
     relationship: Relationship,
@@ -533,6 +548,30 @@ pub unsafe extern "C" fn sc_store_inspect(handle: *mut ScStore, id: *const c_cha
     guard(|| {
         let sc = store(handle)?;
         let inspection = sc.store.inspect(&sc.principal, text(id, "id")?)?;
+        give_json(out_json, &inspection)
+    })
+}
+
+/// Inspect as another principal: `actor` with `audiences_json`, a JSON array
+/// of audience labels. The same access rule as the core applies, so a
+/// withheld identifier is `SC_ERR_NOT_FOUND` exactly like an absent one.
+///
+/// # Safety
+/// Pointers follow the header's contract.
+#[no_mangle]
+pub unsafe extern "C" fn sc_store_inspect_as(
+    handle: *mut ScStore,
+    actor: *const c_char,
+    audiences_json: *const c_char,
+    id: *const c_char,
+    out_json: *mut *mut c_char,
+) -> i32 {
+    guard(|| {
+        let sc = store(handle)?;
+        let actor = text(actor, "actor")?;
+        let audiences: Vec<String> = serde_json::from_str(text(audiences_json, "audiences_json")?)?;
+        let principal = Principal::new(actor, audiences);
+        let inspection = sc.store.inspect(&principal, text(id, "id")?)?;
         give_json(out_json, &inspection)
     })
 }
@@ -703,6 +742,66 @@ mod tests {
         // The pointer entry points stay quiet on null and on nothing to report.
         unsafe { sc_string_free(std::ptr::null_mut()) };
         assert!(!sc_version().is_null());
+    }
+
+    #[test]
+    fn inspect_as_applies_the_core_access_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("library.sqlite");
+        let mut handle: *mut ScStore = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { sc_store_open(c(db.to_str().unwrap()).as_ptr(), c("ava").as_ptr(), &mut handle) },
+            SC_OK
+        );
+        // Build through the core so audiences can be set: a shared thing, a
+        // shared manual and an owner-only tax file, both linked to the thing.
+        let (thing, manual, tax) = {
+            let sc = unsafe { &mut *handle };
+            let p = sc.principal.clone();
+            let thing = sc.store.create_thing(&p, "Dishwasher", ["adults".to_string()].into()).unwrap();
+            let loc = |d: &str, path: &str| Location {
+                volume_uuid: "vol".into(),
+                document_id: d.into(),
+                path: path.into(),
+                name: None,
+                size: None,
+                modified_at: None,
+            };
+            let (manual, _, _) = sc
+                .store
+                .register_file(&p, "Dishwasher manual", loc("m", "/Robin/Manual.pdf"), None, ["adults".to_string()].into())
+                .unwrap();
+            let (tax, _, _) = sc
+                .store
+                .register_file(&p, "Tax return 2025", loc("t", "/Robin/Private/Tax.pdf"), None, Default::default())
+                .unwrap();
+            sc.store.link(&p, "DOCUMENTS", &manual.id, &thing.id, vec![]).unwrap();
+            sc.store.link(&p, "REFERENCES", &tax.id, &thing.id, vec![]).unwrap();
+            (thing.id, manual.id, tax.id)
+        };
+        let mut out: *mut c_char = std::ptr::null_mut();
+        let inspect_as = |actor: &str, audiences: &str, id: &str, out: &mut *mut c_char| unsafe {
+            sc_store_inspect_as(handle, c(actor).as_ptr(), c(audiences).as_ptr(), c(id).as_ptr(), out)
+        };
+        // Owner: both edges.
+        assert_eq!(inspect_as("ava", "[]", &thing, &mut out), SC_OK);
+        let owner_view = take(out);
+        assert!(owner_view.contains(&manual) && owner_view.contains(&tax));
+        // A household member: the manual's edge only; the tax file never appears.
+        assert_eq!(inspect_as("robin", "[\"adults\"]", &thing, &mut out), SC_OK);
+        let robin_view = take(out);
+        assert!(robin_view.contains(&manual));
+        assert!(!robin_view.contains(&tax));
+        assert!(!robin_view.contains("Tax return"));
+        assert!(!robin_view.contains("REFERENCES"));
+        assert_eq!(inspect_as("robin", "[\"adults\"]", &tax, &mut out), SC_ERR_NOT_FOUND);
+        // Someone outside every audience: the thing itself is withheld.
+        assert_eq!(inspect_as("hale", "[]", &thing, &mut out), SC_ERR_NOT_FOUND);
+        let withheld = last_error();
+        assert_eq!(inspect_as("hale", "[]", "01J00000000000000000000000", &mut out), SC_ERR_NOT_FOUND);
+        assert_eq!(withheld.replace(&thing, ""), last_error().replace("01J00000000000000000000000", ""));
+        assert_eq!(inspect_as("robin", "not json", &thing, &mut out), SC_ERR_VALIDATION);
+        unsafe { sc_store_close(handle) };
     }
 
     #[test]

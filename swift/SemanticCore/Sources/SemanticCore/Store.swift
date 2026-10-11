@@ -131,6 +131,39 @@ public final class Store {
         try decode(JSONObject.self, from: try inspectJSON(id))
     }
 
+    /// Who is asking, for viewer-scoped reads.
+    public struct Principal: Sendable, Equatable {
+        public let actor: String
+        public let audiences: [String]
+
+        public init(actor: String, audiences: [String] = []) {
+            self.actor = actor
+            self.audiences = audiences
+        }
+    }
+
+    /// Inspect as another principal. The core's access rule applies: a
+    /// withheld identifier throws `.notFound` exactly like an absent one.
+    public func inspectJSON(_ id: String, as principal: Principal) throws -> String {
+        let id = try boundary(id, "id")
+        let actor = try boundary(principal.actor, "actor")
+        for audience in principal.audiences { _ = try boundary(audience, "audience") }
+        let audiences = String(decoding: try JSONEncoder().encode(principal.audiences), as: UTF8.self)
+        return try call { out in sc_store_inspect_as(handle, actor, audiences, id, out) }
+    }
+
+    public func inspect(_ id: String, as principal: Principal) throws -> JSONObject {
+        try decode(JSONObject.self, from: try inspectJSON(id, as: principal))
+    }
+
+    /// Change an entity's audience (owner only).
+    public func setAudience(_ id: String, audiences: [String]) throws {
+        let id = try boundary(id, "id")
+        for audience in audiences { _ = try boundary(audience, "audience") }
+        let json = String(decoding: try JSONEncoder().encode(audiences), as: UTF8.self)
+        try check(sc_store_set_audience(handle, id, json))
+    }
+
     public func whyJSON(relationship: String) throws -> String {
         let relationship = try boundary(relationship, "relationship")
         return try call { out in sc_store_why(handle, relationship, out) }

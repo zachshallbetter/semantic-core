@@ -11,8 +11,7 @@ A receipt, a warranty, a manual and a service record can all refer to the same d
 Stage 1 Rust core implemented and tested: `sc-envelope`, `sc-vocab`, `sc-core` and `sc-cli` pass their fixtures under `cargo test --workspace`, and the Reflective Rust golden vector reproduces. `sc-ffi` and the Swift package are not started. Nothing in this repository is a conformance claim for any external protocol.
 
 - [Definition v0.2.2](docs/semantic-core-definition-v0.2.2.md) is the architecture of record: ontology, decision boundaries, protocol responsibilities, macOS integration, security, stage plan, fixtures, and the nine answered design decisions.
-- [Build brief](docs/build-brief-2026-10-10.md) is the plan: stack, repo policy, Stage 1 scope, task order.
-- [Thought-experiment record](docs/thought-experiment-2026-10-10.md) is the design history and what was verified against which source.
+- [Roadmap](docs/ROADMAP.md) is the stage plan and task order.
 
 ## Shape
 
@@ -39,7 +38,7 @@ Link two files, move one, resolve and inspect the relationship, retract it, insp
 - Verdicts attach to commitments, never to relationships.
 - Access is enforced before traversal, counting, search, export and surface participation.
 - History is append-only. Undo is a compensating event.
-- The graph outlives every consumer. Finder, Jellybean, titan, ASE and Fundamental Engine read it; none of them own it.
+- The graph outlives every consumer. Finder, assistants, editors and renderers read it; none of them own it.
 
 ## License
 

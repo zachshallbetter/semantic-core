@@ -12,7 +12,12 @@ jobs:
       - run: cargo test --workspace
   swift:
     runs-on: macos-latest
-    if: ${{ hashFiles('swift/SemanticCore/Package.swift') != '' }}
     steps:
       - uses: actions/checkout@v4
-      - run: swift test --package-path swift/SemanticCore
+      - name: Swift package tests (skipped until the package exists)
+        run: |
+          if [ -f swift/SemanticCore/Package.swift ]; then
+            swift test --package-path swift/SemanticCore
+          else
+            echo "no Swift package yet"
+          fi

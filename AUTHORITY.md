@@ -31,5 +31,5 @@ Evidence is orthogonal to precedence. A fixture that fails may challenge the def
 ## Authority over changes
 
 - The owner decides acceptance of definition revisions, protocol departures and anything that widens scope.
-- Agents may propose, implement and test within the build brief's task order. They open pull requests; they do not merge their own.
-- Commits are authored by the owner. No tool attribution appears in commits, pull requests, documentation or code.
+- Changes arrive as pull requests that follow the build brief's task order and are merged by the owner after review.
+- Commits are authored by the owner.

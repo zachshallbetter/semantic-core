@@ -9,12 +9,12 @@
   "buildBriefRef": "docs/build-brief-2026-10-10.md",
   "operatingMode": "new",
   "executionProvider": {
-    "name": "claude-code",
+    "name": "owner",
     "workGraph": "github-issues",
     "repository": "github",
-    "dispatch": "cloud session for Rust crates and fixtures; local macOS session for the Swift package and Finder work",
+    "dispatch": "pull requests following the build brief's task order",
     "verification": "github-actions: cargo test on ubuntu, swift test on macos",
-    "protection": "owner review; agents never merge their own pull requests"
+    "protection": "owner review before merge"
   },
   "authorizationProvider": {
     "name": "owner",
@@ -25,8 +25,14 @@
     {
       "service": "github",
       "interface": "official-cli",
-      "allowedEnvironments": ["local", "cloud"],
-      "allowedEffects": ["read", "reversible-write"],
+      "allowedEnvironments": [
+        "local",
+        "cloud"
+      ],
+      "allowedEffects": [
+        "read",
+        "reversible-write"
+      ],
       "protectedEffects": [
         "git.protected_ref.update",
         "git.history.rewrite",
@@ -38,7 +44,7 @@
     }
   ],
   "authorityBindings": {
-    "projectMutation": "agent within the build brief's task order, by pull request",
+    "projectMutation": "pull request within the build brief's task order",
     "qualification": "fixtures and CI; the weakest claim the evidence justifies governs",
     "promotion": "owner",
     "productionOperation": "not applicable in Stage 1",

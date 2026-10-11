@@ -1,0 +1,19 @@
+{
+  "name": "missing volume",
+  "proves": ["Stage 1 item 3 and 4: an unreachable volume makes instances unavailable, not missing; a hash match while the previous instance is merely unavailable stays AMBIGUOUS"],
+  "steps": [
+    { "thing": { "as": "dishwasher", "label": "Dishwasher" } },
+    { "file": { "as": "manual", "label": "Manual.pdf", "volume": "vol-leo", "document": "doc-1", "path": "/Volumes/Leo/Manual.pdf", "hash": "manual-v1" } },
+    { "file": { "as": "photo", "label": "Serial plate.heic", "volume": "vol-leo", "document": "doc-2", "path": "/Volumes/Leo/Serial plate.heic", "hash": "photo-v1" } },
+    { "link": { "as": "documents", "source": "manual.artifact", "predicate": "DOCUMENTS", "target": "dishwasher" } },
+    { "volume_unavailable": { "volume": "vol-leo", "instances": 2 } },
+    { "expect_instance": { "instance": "manual", "status": "unavailable" } },
+    { "expect_instance": { "instance": "photo", "status": "unavailable" } },
+    { "expect_state": { "relationship": "documents", "state": "PRESENT" } },
+    { "observe": { "volume": "vol-robin", "document": "doc-5", "path": "/Volumes/Robin/Manual.pdf", "hash": "manual-v1", "expect": "AMBIGUOUS", "rule": "content-hash-candidate-still-present", "candidates": ["manual"] } },
+    { "volume_unavailable": { "volume": "vol-leo", "instances": 0 } },
+    { "observe": { "volume": "vol-leo", "document": "doc-1", "path": "/Volumes/Leo/Manual.pdf", "hash": "manual-v1", "expect": "RESOLVED", "rule": "within-volume-key", "instance": "manual" } },
+    { "expect_instance": { "instance": "manual", "status": "present" } },
+    { "expect_instance": { "instance": "photo", "status": "unavailable" } }
+  ]
+}

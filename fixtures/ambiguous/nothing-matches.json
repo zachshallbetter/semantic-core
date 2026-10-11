@@ -1,0 +1,12 @@
+{
+  "name": "nothing matches",
+  "proves": ["Stage 1 item 3: an unknown file is UNRESOLVED and changes nothing"],
+  "steps": [
+    { "thing": { "as": "dishwasher", "label": "Dishwasher" } },
+    { "file": { "as": "warranty", "label": "Warranty.pdf", "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Kitchen/Warranty.pdf", "hash": "warranty-v1" } },
+    { "link": { "as": "documents", "source": "warranty.artifact", "predicate": "DOCUMENTS", "target": "dishwasher" } },
+    { "observe": { "volume": "vol-leo", "document": "doc-2", "path": "/Volumes/Leo/Unknown.pdf", "hash": "unknown-v1", "expect": "UNRESOLVED", "rule": "no-match" } },
+    { "expect_instance": { "instance": "warranty", "status": "present", "path": "/Volumes/Robin/Kitchen/Warranty.pdf" } },
+    { "expect_count": { "entity": "dishwasher", "relationships": 1 } }
+  ]
+}

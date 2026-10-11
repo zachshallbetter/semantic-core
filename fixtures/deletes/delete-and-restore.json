@@ -1,0 +1,17 @@
+{
+  "name": "delete, stale path, restore",
+  "proves": ["Stage 1 item 3: a missing file is an explicit UNRESOLVED outcome; the instance is marked missing, nothing else is deleted; restoring resolves through the same key"],
+  "steps": [
+    { "thing": { "as": "dishwasher", "label": "Dishwasher" } },
+    { "file": { "as": "receipt", "label": "Receipt.pdf", "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Kitchen/Receipt.pdf", "hash": "receipt-v1" } },
+    { "link": { "as": "documents", "source": "receipt.artifact", "predicate": "DOCUMENTS", "target": "dishwasher" } },
+    { "gone": { "instance": "receipt" } },
+    { "expect_instance": { "instance": "receipt", "status": "missing", "path": "/Volumes/Robin/Kitchen/Receipt.pdf" } },
+    { "expect_artifact_exists": "receipt.artifact" },
+    { "expect_thing_exists": "dishwasher" },
+    { "expect_state": { "relationship": "documents", "state": "PRESENT" } },
+    { "expect_count": { "entity": "dishwasher", "relationships": 1 } },
+    { "observe": { "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Kitchen/Receipt.pdf", "hash": "receipt-v1", "expect": "RESOLVED", "rule": "within-volume-key", "instance": "receipt" } },
+    { "expect_instance": { "instance": "receipt", "status": "present" } }
+  ]
+}

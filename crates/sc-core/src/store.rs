@@ -217,6 +217,15 @@ impl Store {
         window: Option<(String, String)>,
         audience: &BTreeSet<String>,
     ) -> Result<EventEnvelope> {
+        Self::envelope_with_access(record, kind, window, project_audience(audience))
+    }
+
+    pub(crate) fn envelope_with_access(
+        record: EventRecord,
+        kind: ProvenanceKind,
+        window: Option<(String, String)>,
+        minimum_access: AccessLevel,
+    ) -> Result<EventEnvelope> {
         let (class, id) = record.change.subject();
         let subject_id = format!("sc:{}:{}", class.prefix(), id);
         let source = format!("actor:{}", record.actor);
@@ -230,7 +239,6 @@ impl Store {
             }
             (kind, _) => Provenance::new(kind, record.authority.clone(), source, source_hash),
         };
-        let minimum_access = project_audience(audience);
         Ok(EventEnvelope::new(subject_id, EVENT_SCHEMA, provenance, minimum_access, record)?)
     }
 
@@ -259,18 +267,6 @@ impl Store {
             .conn
             .query_row("SELECT hash FROM events ORDER BY seq DESC LIMIT 1", [], |row| row.get(0))
             .optional()?)
-    }
-
-    pub(crate) fn has_event_hash(&self, hash: &str) -> Result<bool> {
-        Ok(self
-            .conn
-            .query_row(
-                "SELECT 1 FROM events WHERE hash = ?1 OR origin = ?1 LIMIT 1",
-                params![hash],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some())
     }
 
     /// Every event in order. Owner only: the raw log is the trust boundary.

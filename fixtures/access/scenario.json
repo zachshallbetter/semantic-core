@@ -1,0 +1,54 @@
+{
+  "name": "household access under the single-owner policy",
+  "owner": "ava",
+  "principals": {
+    "ava": [],
+    "robin": ["adults"],
+    "leo": ["kids"],
+    "hale": []
+  },
+  "things": [
+    { "as": "dishwasher", "label": "Dishwasher", "audience": ["adults", "kids"] },
+    { "as": "safe", "label": "Safe", "audience": [] },
+    { "as": "bike", "label": "Bike", "audience": ["kids"] }
+  ],
+  "files": [
+    { "as": "manual", "label": "Dishwasher manual", "path": "/Volumes/Robin/Manual.pdf", "audience": ["adults", "kids"] },
+    { "as": "combination", "label": "Safe combination", "path": "/Volumes/Robin/Private/Combination.txt", "audience": [] },
+    { "as": "tax", "label": "Tax return 2025", "path": "/Volumes/Robin/Private/Tax 2025.pdf", "audience": ["adults"] },
+    { "as": "bike-receipt", "label": "Bike receipt", "path": "/Volumes/Robin/Bike receipt.pdf", "audience": ["adults", "kids"] }
+  ],
+  "links": [
+    { "as": "manual-documents", "source": "manual.artifact", "predicate": "DOCUMENTS", "target": "dishwasher" },
+    { "as": "combination-documents", "source": "combination.artifact", "predicate": "DOCUMENTS", "target": "safe" },
+    { "as": "tax-references", "source": "tax.artifact", "predicate": "REFERENCES", "target": "dishwasher" },
+    { "as": "tax-references-safe", "source": "tax.artifact", "predicate": "REFERENCES", "target": "safe" },
+    { "as": "receipt-documents", "source": "bike-receipt.artifact", "predicate": "DOCUMENTS", "target": "bike" }
+  ],
+  "expectations": [
+    { "principal": "ava", "entity": "dishwasher", "count": 2, "labels": ["DOCUMENTED_BY", "REFERENCED_BY"] },
+    { "principal": "robin", "entity": "dishwasher", "count": 2, "labels": ["DOCUMENTED_BY", "REFERENCED_BY"] },
+    { "principal": "leo", "entity": "dishwasher", "count": 1, "labels": ["DOCUMENTED_BY"] },
+    { "principal": "hale", "entity": "dishwasher", "not_found": true },
+    { "principal": "robin", "entity": "safe", "not_found": true },
+    { "principal": "robin", "entity": "tax.artifact", "count": 1, "labels": ["REFERENCES"] },
+    { "principal": "leo", "entity": "tax.artifact", "not_found": true },
+    { "principal": "leo", "entity": "manual-documents", "visible": true },
+    { "principal": "leo", "entity": "tax-references", "not_found": true },
+    { "principal": "robin", "entity": "tax-references-safe", "not_found": true },
+    { "principal": "ava", "entity": "tax-references-safe", "visible": true }
+  ],
+  "transitive": [
+    { "principal": "ava", "start": "manual.artifact", "depth": 4, "reaches": ["dishwasher", "tax.artifact", "safe", "combination.artifact"] },
+    { "principal": "robin", "start": "manual.artifact", "depth": 4, "reaches": ["dishwasher", "tax.artifact"], "never": ["safe", "combination.artifact"] },
+    { "principal": "leo", "start": "manual.artifact", "depth": 4, "reaches": ["dishwasher"], "never": ["tax.artifact", "safe", "combination.artifact"] }
+  ],
+  "searches": [
+    { "principal": "ava", "text": "Safe", "hits": ["safe", "combination.artifact"] },
+    { "principal": "robin", "text": "Safe", "hits": [] },
+    { "principal": "leo", "text": "Tax", "hits": [] },
+    { "principal": "robin", "text": "Tax", "hits": ["tax.artifact", "tax"] },
+    { "principal": "leo", "text": "Bike", "hits": ["bike", "bike-receipt.artifact", "bike-receipt"] },
+    { "principal": "robin", "text": "Bike", "hits": ["bike-receipt.artifact", "bike-receipt"] }
+  ]
+}

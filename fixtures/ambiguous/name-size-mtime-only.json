@@ -1,0 +1,14 @@
+{
+  "name": "only name, size and modification time match",
+  "proves": ["Stage 1 item 4: weak evidence stays AMBIGUOUS, never RESOLVED"],
+  "steps": [
+    { "thing": { "as": "dishwasher", "label": "Dishwasher" } },
+    { "file": { "as": "warranty", "label": "Warranty.pdf", "volume": "vol-robin", "document": "doc-1", "path": "/Volumes/Robin/Kitchen/Warranty.pdf", "size": 48213, "mtime": "2026-09-01T08:00:00Z" } },
+    { "link": { "as": "documents", "source": "warranty.artifact", "predicate": "DOCUMENTS", "target": "dishwasher" } },
+    { "gone": { "instance": "warranty" } },
+    { "observe": { "volume": "vol-leo", "document": "doc-4", "path": "/Volumes/Leo/Warranty.pdf", "size": 48213, "mtime": "2026-09-01T08:00:00Z", "expect": "AMBIGUOUS", "rule": "name-size-mtime-only", "candidates": ["warranty"] } },
+    { "expect_instance": { "instance": "warranty", "status": "missing", "volume": "vol-robin" } },
+    { "expect_state": { "relationship": "documents", "state": "PRESENT" } },
+    { "observe": { "volume": "vol-leo", "document": "doc-4", "path": "/Volumes/Leo/Warranty.pdf", "size": 48214, "mtime": "2026-09-01T08:00:00Z", "expect": "UNRESOLVED", "rule": "no-match" } }
+  ]
+}

@@ -278,3 +278,106 @@ fn without_source_hash(text: &str) -> String {
     }
     out
 }
+
+// ------------------------------------------------------------------ #17
+
+#[test]
+fn replay_and_import_refuse_a_resolution_resting_on_a_not_yet_valid_observation() {
+    let mut source = fixed_store();
+    let p = owner();
+    let (_, _, instance) = source
+        .register_file(
+            &p,
+            "Warranty.pdf",
+            location("vol-robin", "doc-1", "/Volumes/Robin/Warranty.pdf"),
+            Some(hash("warranty")),
+            Default::default(),
+        )
+        .unwrap();
+    source
+        .observe(
+            &p,
+            Seen {
+                location: location("vol-robin", "doc-1", "/Volumes/Robin/Moved.pdf"),
+                content_hash: Some(hash("warranty")),
+                source: "scan".into(),
+                window: None,
+            },
+        )
+        .unwrap();
+    let signing = SigningKey::from_bytes(&[2; 32]);
+    let honest = source.export(&p, "k", &signing).unwrap();
+    // Forge: the observation's window opens after the event was recorded.
+    let mut forged = honest.clone();
+    for signed in &mut forged.events {
+        if let Change::ObservationRecorded { observation, .. } = &mut signed.envelope.body.change {
+            observation.observed_at = "2026-10-10T13:00:00Z".into();
+            observation.expires_at = "2026-10-10T14:00:00Z".into();
+            signed.envelope.provenance.observed_at = Some("2026-10-10T13:00:00Z".into());
+            signed.envelope.provenance.expires_at = Some("2026-10-10T14:00:00Z".into());
+            *signed = signed.envelope.sign("k", &signing).unwrap();
+        }
+    }
+    let mut target = fixed_store();
+    let error = target.import(&p, &forged, &keys(&signing), None).unwrap_err();
+    assert!(matches!(error, Error::Integrity(_)), "{error}");
+    assert!(error.to_string().contains("not valid before"), "{error}");
+    assert_eq!(target.events(&p).unwrap().len(), 1, "all or nothing");
+    target.import(&p, &honest, &keys(&signing), None).unwrap();
+    target.replay().unwrap();
+    assert_eq!(target.get_instance(&p, &instance.id).unwrap().location.path, "/Volumes/Robin/Moved.pdf");
+}
+
+// ------------------------------------------------------------------ #18
+
+#[test]
+fn an_origin_alias_travels_unchanged_and_is_recognised_by_the_library_that_minted_it() {
+    let p = owner();
+    let robin = Principal::new("robin", ["member"]);
+    let signing = SigningKey::from_bytes(&[2; 32]);
+    let mut a = fixed_store();
+    let thing = a.create_thing(&p, "Dishwasher", audience(&["member"])).unwrap();
+    let (artifact, _, _) = a
+        .register_file(
+            &p,
+            "Warranty.pdf",
+            location("vol-robin", "doc-1", "/Volumes/Robin/Warranty.pdf"),
+            Some(hash("warranty")),
+            audience(&["member"]),
+        )
+        .unwrap();
+    a.link(&p, "DOCUMENTS", &artifact.id, &thing.id, vec![]).unwrap();
+
+    // A -> B -> C -> A with owner exports: stored origins pass through and A
+    // recognises every event when the file comes home.
+    let mut b = fixed_store();
+    b.import(&p, &a.export(&p, "k", &signing).unwrap(), &keys(&signing), None).unwrap();
+    let mut c = fixed_store();
+    c.import(&p, &b.export(&p, "k", &signing).unwrap(), &keys(&signing), None).unwrap();
+    let home = c.export(&p, "k", &signing).unwrap();
+    let report = a.import(&p, &home, &keys(&signing), None).unwrap();
+    assert_eq!(report.applied, 0, "{report:?}");
+
+    // A restricted export at B mints B's aliases. They travel through C
+    // unchanged (no second aliasing) and B recognises them when they return.
+    let from_b = b.export(&robin, "k", &signing).unwrap();
+    let minted: Vec<String> = from_b.events.iter().map(|e| e.envelope.body.origin.clone().unwrap()).collect();
+    assert!(minted.iter().all(|o| o.starts_with("origin:")));
+    let mut c2 = fixed_store();
+    c2.import(&p, &from_b, &keys(&signing), None).unwrap();
+    let onward = c2.export(&robin, "k", &signing).unwrap();
+    let carried: Vec<String> = onward.events.iter().map(|e| e.envelope.body.origin.clone().unwrap()).collect();
+    assert_eq!(carried, minted, "an existing alias is carried through, not aliased again");
+    let back_to_b = b.import(&p, &onward, &keys(&signing), None).unwrap();
+    assert_eq!(back_to_b.applied, 0, "{back_to_b:?}");
+    // The owner export of c2 carries the same alias and B recognises that too.
+    let owner_onward = c2.export(&p, "k", &signing).unwrap();
+    assert_eq!(b.import(&p, &owner_onward, &keys(&signing), None).unwrap().applied, 0);
+    // The alias was keyed by B's secret: A, which never saw B's export, is
+    // not the library it names, and treats the events as new.
+    let mut a2 = fixed_store();
+    assert!(a2.import(&p, &onward, &keys(&signing), None).unwrap().applied > 0);
+    // Nothing above exposed a stored hash to the restricted viewer.
+    let text = without_source_hash(&serde_json::to_string(&onward).unwrap());
+    assert!(!text.contains("sha256:"), "{text}");
+}

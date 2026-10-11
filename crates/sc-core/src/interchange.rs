@@ -102,8 +102,11 @@ impl Store {
             let mut envelope = event.envelope.clone();
             envelope.body.previous = None;
             let is_owner = principal.actor == self.owner;
+            // Stored hashes are aliased for non-owners; a value that is already
+            // an alias is keyed by its minting library and travels unchanged,
+            // so that library recognises it however many hops later.
             let name = |hash: &str| -> Result<String> {
-                if is_owner {
+                if is_owner || hash.starts_with("origin:") {
                     Ok(hash.to_string())
                 } else {
                     self.alias_of(hash)

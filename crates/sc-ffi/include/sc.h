@@ -55,7 +55,9 @@ int32_t sc_store_resolve(ScStore *store, const char *path, const char *volume, c
 int32_t sc_store_gone(ScStore *store, const char *instance_id, char **out_json);
 int32_t sc_store_inspect(ScStore *store, const char *id, char **out_json);
 /* Inspect as another principal: actor plus a JSON array of audience labels;
- * the core's access rule applies, withheld reads as absent. */
+ * the core's access rule applies, withheld reads as absent. The actor and
+ * audiences are asserted by the caller, not checked: the caller is the
+ * authority that established who is asking. */
 int32_t sc_store_inspect_as(ScStore *store, const char *actor, const char *audiences_json, const char *id, char **out_json);
 int32_t sc_store_why(ScStore *store, const char *relationship_id, char **out_json);
 int32_t sc_store_history(ScStore *store, const char *id, char **out_json);

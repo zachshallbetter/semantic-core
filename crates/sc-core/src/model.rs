@@ -65,9 +65,20 @@ pub fn projected_audience(audience: &BTreeSet<String>) -> BTreeSet<String> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Access {
+    /// Empty only in a projection handed to a principal other than the
+    /// owner, where ownership and audience are withheld.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub owner: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub audience: BTreeSet<String>,
+}
+
+impl Access {
+    /// Withhold ownership and audience: what a non-owner may not learn.
+    pub fn redact(&mut self) {
+        self.owner.clear();
+        self.audience.clear();
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

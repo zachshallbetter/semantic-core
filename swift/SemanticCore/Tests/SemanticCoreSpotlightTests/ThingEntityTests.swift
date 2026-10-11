@@ -83,7 +83,7 @@ final class ThingEntityTests: XCTestCase {
         // set: not its identifier, label, path, predicate, nor a count that
         // would betray it.
         let archived = String(decoding: try entity.archivedAttributeSet(), as: UTF8.self)
-        for hidden in [s.taxArtifact, "Tax return", "Tax return 2025", "REFERENCED_BY", "REFERENCES", "doc-tax", "Private"] {
+        for hidden in [s.taxArtifact, "Tax return", "Tax return 2025", "REFERENCED_BY", "REFERENCES", "doc-tax"] {
             XCTAssertFalse(archived.contains(hidden), "hidden value \(hidden) reached the attribute set")
         }
         XCTAssertTrue(archived.contains(s.manualArtifact))
@@ -92,6 +92,15 @@ final class ThingEntityTests: XCTestCase {
         XCTAssertFalse(archived.contains("kids"))
         XCTAssertFalse(archived.contains("ava"))
         XCTAssertEqual(entity.relationships.count, 1)
+        // The raw viewer inspect itself carries neither the owner name nor
+        // any audience label; the owner's view still does.
+        let raw = try s.store.inspectJSON(s.thing, as: leo)
+        for withheld in ["\"ava\"", "adults", "kids", "\"owner\""] {
+            XCTAssertFalse(raw.contains(withheld), "viewer inspect carries \(withheld)")
+        }
+        let ownerRaw = try s.store.inspectJSON(s.thing)
+        XCTAssertTrue(ownerRaw.contains("\"owner\":\"ava\""))
+        XCTAssertTrue(ownerRaw.contains("adults"))
         // The owner's view of the same thing is wider, so the difference is
         // the projection, not the data.
         let owner = try XCTUnwrap(ThingEntity.load(s.thing, from: s.store, as: .init(actor: "ava")))

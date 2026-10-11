@@ -105,7 +105,8 @@ fn collection_reads_apply_the_row_rule_after_a_child_is_narrowed() {
         .unwrap();
     assert_eq!(ambiguous.outcome, Outcome::Ambiguous);
 
-    // Before narrowing, robin sees everything under the artifact.
+    // Before narrowing, robin sees everything under the artifact, directly or in collections.
+    store.get_resolution(&robin, &ambiguous.id).unwrap();
     assert_eq!(store.instances_of(&robin, &artifact.id).unwrap().len(), 2);
     assert_eq!(store.revisions_of(&robin, &artifact.id).unwrap().len(), 2);
     assert_eq!(store.assertions_of(&robin, &relationship.id).unwrap().len(), 2);
@@ -134,6 +135,9 @@ fn collection_reads_apply_the_row_rule_after_a_child_is_narrowed() {
         .iter()
         .any(|r| r.id == ambiguous.id));
     assert!(matches!(store.get_instance(&robin, &second.id), Err(Error::NotFound(_))));
+    // Direct reads follow the same rule as the collection.
+    assert!(matches!(store.get_resolution(&robin, &ambiguous.id), Err(Error::NotFound(_))));
+    store.get_resolution(&p, &ambiguous.id).unwrap();
     // The owner still sees all of it, and inspect follows the same rule.
     assert_eq!(store.instances_of(&p, &artifact.id).unwrap().len(), 2);
     match store.inspect(&robin, &artifact.id).unwrap() {
@@ -216,7 +220,8 @@ fn unregistered_predicates_are_refused_locally_and_inert_when_imported() {
     for signed in &mut export.events {
         if let Change::RelationshipDeclared { relationship } = &mut signed.envelope.body.change {
             relationship.predicate = "x-unknown:OWNS".into();
-            relationship.materializes = false;
+            // The file claims the flag; the importer derives it from the predicate.
+            relationship.materializes = true;
             *signed = signed.envelope.sign("k", &signing).unwrap();
         }
     }
@@ -371,4 +376,179 @@ fn hashed_integers_beyond_2_to_the_53_are_refused_before_they_enter_the_log() {
         )
         .unwrap();
     store.verify_chain().unwrap();
+}
+
+#[test]
+fn resolutions_follow_one_rule_directly_and_in_collections() {
+    let mut store = fixed_store();
+    let p = owner();
+    let robin = Principal::new("robin", ["adults"]);
+    let (_, _, shared) = store
+        .register_file(
+            &p,
+            "Manual.pdf",
+            location("vol-robin", "doc-1", "/Volumes/Robin/Manual.pdf"),
+            Some(hash("manual")),
+            audience(&["adults"]),
+        )
+        .unwrap();
+    let (_, _, hidden) = store
+        .register_file(
+            &p,
+            "Tax.pdf",
+            location("vol-robin", "doc-2", "/Volumes/Robin/Tax.pdf"),
+            Some(hash("tax")),
+            Default::default(),
+        )
+        .unwrap();
+    // RESOLVED, naming a visible instance: readable both ways.
+    let seen_shared = store
+        .observe(&p, Seen { location: location("vol-robin", "doc-1", "/Volumes/Robin/Kitchen/Manual.pdf"), content_hash: None, source: "scan".into() })
+        .unwrap();
+    assert_eq!(seen_shared.outcome, Outcome::Resolved);
+    store.get_resolution(&robin, &seen_shared.id).unwrap();
+    assert!(store.resolutions_for_instance(&robin, &shared.id).unwrap().iter().any(|r| r.id == seen_shared.id));
+    // RESOLVED, naming a hidden instance: withheld both ways.
+    let seen_hidden = store
+        .observe(&p, Seen { location: location("vol-robin", "doc-2", "/Volumes/Robin/Private/Tax.pdf"), content_hash: None, source: "scan".into() })
+        .unwrap();
+    assert!(matches!(store.get_resolution(&robin, &seen_hidden.id), Err(Error::NotFound(_))));
+    assert!(matches!(store.resolutions_for_instance(&robin, &hidden.id), Err(Error::NotFound(_))));
+    store.get_resolution(&p, &seen_hidden.id).unwrap();
+    // UNRESOLVED, naming nothing: the owner's alone.
+    let nothing = store
+        .observe(&p, Seen { location: location("vol-leo", "doc-9", "/Volumes/Leo/x.pdf"), content_hash: Some(hash("x")), source: "scan".into() })
+        .unwrap();
+    assert_eq!(nothing.outcome, Outcome::Unresolved);
+    assert!(matches!(store.get_resolution(&robin, &nothing.id), Err(Error::NotFound(_))));
+    store.get_resolution(&p, &nothing.id).unwrap();
+}
+
+// ------------------------------------------------------------------ #6, recomputation
+
+/// A library where hidden events sit between a member's visible ones,
+/// including a retraction.
+fn interleaved() -> (Store, String, String) {
+    let mut store = fixed_store();
+    let p = owner();
+    let shared = store.create_thing(&p, "Dishwasher", audience(&["adults"])).unwrap();
+    let (manual, _, _) = store
+        .register_file(&p, "Manual.pdf", location("vol-robin", "doc-1", "/Volumes/Robin/Manual.pdf"), Some(hash("manual")), audience(&["adults"]))
+        .unwrap();
+    let (relationship, assertion) = store.link(&p, "DOCUMENTS", &manual.id, &shared.id, vec![]).unwrap();
+    let (secret, _, _) = store
+        .register_file(&p, "Tax.pdf", location("vol-robin", "doc-2", "/Volumes/Robin/Tax.pdf"), Some(hash("tax")), Default::default())
+        .unwrap();
+    store.link(&p, "REFERENCES", &secret.id, &shared.id, vec![]).unwrap();
+    store.retract_assertion(&p, &assertion.id, "wrong appliance").unwrap();
+    store.link(&p, "RELATED_TO", &manual.id, &shared.id, vec![]).unwrap();
+    (store, shared.id, relationship.id)
+}
+
+#[test]
+fn a_restricted_viewer_cannot_recompute_hashes_to_detect_withheld_events() {
+    let (store, shared, relationship) = interleaved();
+    let p = owner();
+    let robin = Principal::new("robin", ["adults"]);
+    let leo = Principal::new("leo", ["adults"]);
+    let stored: Vec<String> = store.events(&p).unwrap().into_iter().map(|e| e.hash).collect();
+
+    let view = store.history(&robin, &shared).unwrap();
+    let why = store.why(&robin, &relationship).unwrap();
+    // The attack: take each shown envelope, try every plausible predecessor
+    // (the previous shown event, or any stored hash at all), recompute, and
+    // compare with the identifier shown. Nothing matches.
+    for window in view.windows(2) {
+        let mut guess = window[1].envelope.clone();
+        let mut candidates = vec![window[0].hash.clone()];
+        candidates.extend(stored.iter().cloned());
+        for candidate in candidates {
+            guess.body.previous = Some(candidate);
+            assert_ne!(guess.canonical_hash().unwrap(), window[1].hash);
+        }
+    }
+    // No stored hash appears anywhere in what the viewer receives,
+    // including the retraction's `compensates`.
+    let shown = serde_json::to_string(&view).unwrap() + &serde_json::to_string(&why).unwrap();
+    for hash in &stored {
+        assert!(!shown.contains(hash), "stored hash leaked to a restricted viewer");
+    }
+    assert!(view.iter().all(|e| e.hash.starts_with("view:")));
+    let mut saw_retraction = false;
+    for event in &why.events {
+        if let Change::AssertionRetracted { compensates, .. } = &event.envelope.body.change {
+            saw_retraction = true;
+            assert!(compensates.starts_with("view:"));
+            assert!(why.events.iter().any(|e| &e.hash == compensates), "compensates still resolves inside the viewer's own list");
+        }
+    }
+    assert!(saw_retraction);
+    // Identifiers are stable for one viewer and differ between viewers.
+    let again = store.history(&robin, &shared).unwrap();
+    assert_eq!(view.iter().map(|e| &e.hash).collect::<Vec<_>>(), again.iter().map(|e| &e.hash).collect::<Vec<_>>());
+    let leo_view = store.history(&leo, &shared).unwrap();
+    assert_eq!(leo_view.len(), view.len());
+    assert!(leo_view.iter().zip(&view).all(|(a, b)| a.hash != b.hash));
+    // The owner still sees the stored hashes.
+    assert!(store.history(&p, &shared).unwrap().iter().all(|e| e.hash.starts_with("sha256:")));
+}
+
+#[test]
+fn a_restricted_export_carries_no_stored_hash_and_still_round_trips() {
+    let (mut store, _, _) = interleaved();
+    let p = owner();
+    let robin = Principal::new("robin", ["adults"]);
+    let stored: Vec<String> = store.events(&p).unwrap().into_iter().map(|e| e.hash).collect();
+    let signing = SigningKey::from_bytes(&[2; 32]);
+    let keys = || TrustedKeys::new().trust(OWNER, "k", signing.verifying_key());
+    let export = store.export(&robin, "k", &signing).unwrap();
+    let text = serde_json::to_string(&export).unwrap();
+    for hash in &stored {
+        assert!(!text.contains(hash), "stored hash left in a restricted export");
+    }
+    assert!(export.events.iter().all(|e| e.envelope.body.origin.as_deref().is_some_and(|o| o.starts_with("origin:"))));
+    assert!(export.events.iter().any(|e| matches!(&e.envelope.body.change, Change::AssertionRetracted { compensates, .. } if compensates.starts_with("origin:"))));
+    // The same oracle does not exist here either: guessing a predecessor and
+    // recomputing never matches the alias.
+    for signed in &export.events {
+        let mut guess = signed.envelope.clone();
+        for candidate in &stored {
+            guess.body.previous = Some(candidate.clone());
+            assert_ne!(Some(guess.canonical_hash().unwrap()), signed.envelope.body.origin);
+        }
+    }
+    // Coming back to the library it left, every event is recognised.
+    let report = store.import(&p, &export, &keys()).unwrap();
+    assert_eq!(report.applied, 0, "{report:?}");
+    // And it imports into another library once.
+    let mut other = fixed_store();
+    assert!(other.import(&p, &export, &keys()).unwrap().applied > 0);
+    assert_eq!(other.import(&p, &export, &keys()).unwrap().applied, 0);
+    // The owner's own export names stored hashes, for the owner.
+    let owner_export = store.export(&p, "k", &signing).unwrap();
+    assert!(owner_export.events.iter().any(|e| e.envelope.body.origin.as_deref().is_some_and(|o| o.starts_with("sha256:"))));
+}
+
+#[test]
+fn a_pre_forked_library_fails_to_open_with_a_readable_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("library.sqlite");
+    {
+        let mut store = Store::open_or_create(&path, OWNER).unwrap();
+        store.create_thing(&owner(), "Dishwasher", Default::default()).unwrap();
+    }
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("DROP INDEX events_previous;").unwrap();
+    let (previous, envelope): (Option<String>, String) = conn
+        .query_row("SELECT previous, envelope FROM events ORDER BY seq DESC LIMIT 1", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap();
+    conn.execute(
+        "INSERT INTO events (hash, previous, origin, subject, at, envelope) VALUES ('sha256:fork', ?1, NULL, 's', 't', ?2)",
+        rusqlite::params![previous, envelope],
+    )
+    .unwrap();
+    drop(conn);
+    let error = Store::open(&path).unwrap_err();
+    assert!(matches!(error, Error::Integrity(_)), "{error}");
+    assert!(error.to_string().contains("fork"), "{error}");
 }

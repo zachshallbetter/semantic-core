@@ -10,6 +10,7 @@ use sc_envelope::{AccessLevel, Provenance, ProvenanceKind};
 use sc_vocab::EntityClass;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::path::Path;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -85,6 +86,28 @@ impl Store {
 
     fn from_connection(conn: Connection, owner: Option<&str>) -> Result<Self> {
         conn.execute_batch(crate::schema::SCHEMA)?;
+        conn.execute_batch(crate::schema::PREVIOUS_INDEX).map_err(|e| {
+            Error::Integrity(format!(
+                "the event log already holds a fork (two events name the same predecessor), so the one-successor index cannot be created; repair the log before opening this library ({e})"
+            ))
+        })?;
+        conn.execute(
+            "INSERT OR IGNORE INTO library_secret (id, salt) VALUES ('default', ?1)",
+            params![fresh_salt()],
+        )?;
+        {
+            let salt = salt_in(&conn)?;
+            let mut missing = conn.prepare(
+                "SELECT hash FROM events WHERE hash NOT IN (SELECT hash FROM event_aliases) ORDER BY seq",
+            )?;
+            let hashes: Vec<String> = missing.query_map([], |row| row.get(0))?.collect::<std::result::Result<_, _>>()?;
+            for hash in hashes {
+                conn.execute(
+                    "INSERT OR IGNORE INTO event_aliases (hash, alias) VALUES (?1, ?2)",
+                    params![hash, alias_for(&salt, &hash)],
+                )?;
+            }
+        }
         let existing: Option<(String, String)> = conn
             .query_row("SELECT authority, owner FROM policy WHERE id = 'default'", [], |row| {
                 Ok((row.get(0)?, row.get(1)?))
@@ -267,6 +290,11 @@ impl Store {
             ],
         )?;
         let seq = tx.last_insert_rowid();
+        let salt = salt_in(tx)?;
+        tx.execute(
+            "INSERT OR IGNORE INTO event_aliases (hash, alias) VALUES (?1, ?2)",
+            params![hash, alias_for(&salt, &hash)],
+        )?;
         Self::apply(tx, &record.change, &hash)?;
         Ok(Event { seq, hash, envelope })
     }
@@ -274,12 +302,36 @@ impl Store {
     /// An event as a principal may see it. The owner sees the log as stored;
     /// anyone else sees positions renumbered within their own view and no
     /// `previous` link, so gaps left by withheld events do not show.
-    pub(crate) fn project_event(&self, principal: &Principal, mut event: Event, position: usize) -> Event {
+    pub(crate) fn project_event(&self, principal: &Principal, mut event: Event, position: usize) -> Result<Event> {
         if principal.actor != self.owner {
             event.seq = position as i64;
             event.envelope.body.previous = None;
+            event.hash = self.viewer_event_id(principal, &event.hash)?;
+            if let Change::AssertionRetracted { compensates, .. } = &mut event.envelope.body.change {
+                *compensates = self.viewer_event_id(principal, compensates)?;
+            }
         }
-        event
+        Ok(event)
+    }
+
+    /// The identifier a restricted viewer sees for an event: keyed by the
+    /// library secret and the viewer, so it cannot be recomputed from the
+    /// envelope and does not correlate across viewers.
+    pub fn viewer_event_id(&self, principal: &Principal, hash: &str) -> Result<String> {
+        let salt = salt_in(&self.conn)?;
+        let mut hasher = Sha256::new();
+        hasher.update(salt.as_bytes());
+        hasher.update([0]);
+        hasher.update(principal.actor.as_bytes());
+        hasher.update([0]);
+        hasher.update(hash.as_bytes());
+        Ok(format!("view:{:x}", hasher.finalize()))
+    }
+
+    /// The per-library alias of a stored hash, as used for `origin` in a
+    /// restricted export.
+    pub(crate) fn alias_of(&self, hash: &str) -> Result<String> {
+        Ok(alias_for(&salt_in(&self.conn)?, hash))
     }
 
     /// Every event in order. Owner only: the raw log is the trust boundary.
@@ -480,6 +532,13 @@ impl Store {
             Change::RelationshipDeclared { relationship } => {
                 require_entity(tx, &relationship.source_id)?;
                 require_entity(tx, &relationship.target_id)?;
+                // The flag is derived from the predicate, never trusted from
+                // the record: an imported file cannot promote an unknown one.
+                let predicate = sc_vocab::Predicate::parse(&relationship.predicate)
+                    .map_err(|e| Error::Integrity(format!("relationship {}: {e}", relationship.id)))?;
+                let mut relationship = relationship.clone();
+                relationship.materializes = predicate.materializes();
+                let relationship = &relationship;
                 insert_entity(
                     tx,
                     &relationship.id,
@@ -687,12 +746,11 @@ impl Store {
 
     pub fn get_resolution(&self, principal: &Principal, id: &str) -> Result<Resolution> {
         let resolution: Resolution = self.read("resolutions", id)?;
-        if let Some(instance_id) = &resolution.instance_id {
-            self.require_visible(principal, instance_id)?;
+        if self.resolution_visible(principal, &resolution)? {
+            Ok(resolution)
         } else {
-            self.require_owner(principal).map_err(|_| Error::NotFound(id.to_string()))?;
+            Err(Error::NotFound(id.to_string()))
         }
-        Ok(resolution)
     }
 
     /// Effective disclosure level of an identifier, for export.
@@ -909,6 +967,30 @@ impl Store {
 
 pub(crate) fn json<T: Serialize>(value: &T) -> Result<String> {
     Ok(serde_json::to_string(value)?)
+}
+
+fn fresh_salt() -> String {
+    // Two ULIDs carry 160 random bits between them; the digest spreads them.
+    let mut hasher = Sha256::new();
+    hasher.update(ulid::Ulid::new().to_bytes());
+    hasher.update(ulid::Ulid::new().to_bytes());
+    hasher.update(std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos().to_le_bytes())
+        .unwrap_or([0; 16]));
+    format!("{:x}", hasher.finalize())
+}
+
+pub(crate) fn salt_in(conn: &Connection) -> Result<String> {
+    Ok(conn.query_row("SELECT salt FROM library_secret WHERE id = 'default'", [], |row| row.get(0))?)
+}
+
+pub(crate) fn alias_for(salt: &str, hash: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(salt.as_bytes());
+    hasher.update([1]);
+    hasher.update(hash.as_bytes());
+    format!("origin:{:x}", hasher.finalize())
 }
 
 pub(crate) fn last_hash_in(tx: &Transaction<'_>) -> Result<Option<String>> {

@@ -546,7 +546,7 @@ fn describe_event(event: &Event) -> String {
         event.envelope.provenance.kind.as_str(),
         what,
         body.actor,
-        &event.hash[..19]
+        event.hash.get(..19).unwrap_or(&event.hash)
     )
 }
 

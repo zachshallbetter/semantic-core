@@ -412,7 +412,7 @@ impl Store {
             let touches = subject == id || change.referenced_ids().iter().any(|r| r == id);
             if touches && self.change_visible(principal, change)? {
                 let position = out.len() + 1;
-                out.push(self.project_event(principal, event, position));
+                out.push(self.project_event(principal, event, position)?);
             }
         }
         Ok(out)
@@ -463,11 +463,11 @@ impl Store {
                     by_hash.push(event);
                 }
             }
-            events = by_hash
-                .into_iter()
-                .enumerate()
-                .map(|(i, e)| self.project_event(principal, e, i + 1))
-                .collect();
+            let mut projected = Vec::with_capacity(by_hash.len());
+            for (i, e) in by_hash.into_iter().enumerate() {
+                projected.push(self.project_event(principal, e, i + 1)?);
+            }
+            events = projected;
         }
         Ok(Why {
             relationship,

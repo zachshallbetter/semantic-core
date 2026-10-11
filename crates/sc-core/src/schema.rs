@@ -5,6 +5,7 @@
 pub const SCHEMA: &str = r#"
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
+PRAGMA busy_timeout = 5000;
 
 CREATE TABLE IF NOT EXISTS policy (
     id        TEXT PRIMARY KEY,
@@ -21,6 +22,11 @@ CREATE TABLE IF NOT EXISTS events (
     at       TEXT NOT NULL,
     envelope TEXT NOT NULL
 );
+-- One successor per event: two writers cannot both chain to the same
+-- predecessor. Libraries created before this index gain it on open, since
+-- CREATE UNIQUE INDEX IF NOT EXISTS runs on every open; a library that
+-- already holds a fork fails that statement and must be repaired by hand.
+CREATE UNIQUE INDEX IF NOT EXISTS events_previous ON events(previous);
 CREATE INDEX IF NOT EXISTS events_subject ON events(subject);
 CREATE INDEX IF NOT EXISTS events_origin ON events(origin);
 

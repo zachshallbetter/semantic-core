@@ -198,10 +198,12 @@ fn vocabulary_rules_apply_on_insert() {
     assert!(ext.materializes);
     assert_eq!(ext.predicate, "x-archive:MEMBER_OF");
     store.propose_assertion(&p, &ext.id, Polarity::Supports, vec![]).unwrap();
-    // Unknown predicate: preserved as a value, never materialized.
-    let unknown = store.declare_relationship(&p, "OWNS", &artifact, &thing).unwrap();
-    assert_eq!(unknown.predicate, "x-unknown:OWNS");
-    assert!(!unknown.materializes);
+    // A locally declared predicate that is neither registered nor a namespaced
+    // extension is refused; unknown predicates arrive only through import.
+    assert!(matches!(
+        store.declare_relationship(&p, "OWNS", &artifact, &thing),
+        Err(Error::Vocab(sc_vocab::VocabError::Unregistered(_)))
+    ));
     let labels: Vec<String> = store
         .relationships_of(&p, &thing)
         .unwrap()
@@ -209,9 +211,6 @@ fn vocabulary_rules_apply_on_insert() {
         .map(|v| v.label)
         .collect();
     assert_eq!(labels, ["DOCUMENTED_BY", "x-archive:MEMBER_OF"]);
-    // Still inspectable by id.
-    assert_eq!(store.get_relationship(&p, &unknown.id).unwrap().vocab_version, "sc-vocab-1");
-    assert_eq!(store.relationship_state(&p, &unknown.id).unwrap(), RelationshipState::Unknown);
 }
 
 #[test]

@@ -134,10 +134,10 @@ impl Store {
 
         let imported_at = self.now();
         let owner = self.owner.clone();
-        let mut previous = self.last_hash()?;
         let mut report = ImportReport::default();
         let mut created: BTreeSet<String> = BTreeSet::new();
-        let tx = self.conn.transaction()?;
+        let tx = self.conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let mut previous = crate::store::last_hash_in(&tx)?;
         for (index, signed) in interchange.events.iter().enumerate() {
             let incoming_hash = signed.envelope.canonical_hash()?;
             let origin = signed.envelope.body.origin.clone().unwrap_or_else(|| incoming_hash.clone());

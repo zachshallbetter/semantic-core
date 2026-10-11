@@ -37,6 +37,13 @@ pub const SCHEMA_VERSION: &str = "sc-event-0.1";
 /// golden vector can be reproduced; `validate` pins `sc-event-0.1`.
 pub const RR_SCHEMA_VERSION: &str = "rr-rsp-0.1";
 
+/// Largest integer magnitude a canonical envelope may carry. RFC 8785
+/// serializes numbers as IEEE 754 doubles; below this bound an integer's
+/// shortest double representation is its plain decimal form, so the
+/// integer output of `serde_jcs` is byte-identical to the RFC's. Above it
+/// the two diverge, and validation refuses the envelope instead of rounding.
+pub const MAX_CANONICAL_INTEGER: u64 = 1 << 53;
+
 /// Domain separation string for signatures. The trailing NUL is part of it.
 pub const SIGNATURE_DOMAIN: &[u8] = b"semantic-core:sc-event:ed25519:v1\0";
 
@@ -237,6 +244,7 @@ impl<B: Body> Envelope<B> {
             return Err(ValidationError::UnsupportedSchema(self.schema_version.clone()));
         }
         require_nonempty("compatibility.subject_schema", &self.compatibility.subject_schema)?;
+        check_integers(&serde_json::to_value(self).map_err(|e| ValidationError::Body(e.to_string()))?, "")?;
         match self.provenance.kind {
             ProvenanceKind::Observed => {
                 let observed_at =
@@ -324,6 +332,7 @@ impl<B: Body> Envelope<B> {
     ) -> Result<AuthenticatedEnvelope<B>, AuthenticationError> {
         let key_id = key_id.into();
         require_identifier("signature.key_id", &key_id).map_err(AuthenticationError::Validation)?;
+        self.validate().map_err(AuthenticationError::Validation)?;
         let payload = signature_payload(&key_id, self)?;
         let signature = signing_key.sign(&payload);
         Ok(AuthenticatedEnvelope {
@@ -376,6 +385,7 @@ impl<B: Body> AuthenticatedEnvelope<B> {
                 actual: self.authentication.key_id.clone(),
             });
         }
+        self.envelope.validate().map_err(AuthenticationError::Validation)?;
         let bytes = URL_SAFE_NO_PAD
             .decode(&self.authentication.signature)
             .map_err(|_| AuthenticationError::MalformedSignature)?;
@@ -395,6 +405,39 @@ fn signature_payload<B: Body>(key_id: &str, envelope: &Envelope<B>) -> Result<Ve
     payload.push(0);
     payload.extend_from_slice(canonical.as_bytes());
     Ok(payload)
+}
+
+/// Walk a JSON value and refuse any integer beyond `MAX_CANONICAL_INTEGER`
+/// or any non-finite or fractional number: the envelope carries no floats,
+/// and integers must survive a round trip through an IEEE double.
+pub fn check_integers(value: &serde_json::Value, path: &str) -> Result<(), ValidationError> {
+    match value {
+        serde_json::Value::Number(number) => {
+            let ok = if let Some(u) = number.as_u64() {
+                u <= MAX_CANONICAL_INTEGER
+            } else if let Some(i) = number.as_i64() {
+                i.unsigned_abs() <= MAX_CANONICAL_INTEGER
+            } else {
+                false
+            };
+            if ok {
+                Ok(())
+            } else {
+                Err(ValidationError::IntegerBeyondDouble {
+                    path: path.to_string(),
+                    value: number.to_string(),
+                })
+            }
+        }
+        serde_json::Value::Array(items) => items
+            .iter()
+            .enumerate()
+            .try_for_each(|(i, item)| check_integers(item, &format!("{path}[{i}]"))),
+        serde_json::Value::Object(map) => map
+            .iter()
+            .try_for_each(|(k, v)| check_integers(v, &format!("{path}.{k}"))),
+        _ => Ok(()),
+    }
 }
 
 pub fn require_nonempty(field: &'static str, value: &str) -> Result<(), ValidationError> {
@@ -463,6 +506,8 @@ pub enum ValidationError {
     InvalidFreshnessWindow,
     #[error("{0}")]
     Body(String),
+    #[error("{path} = {value} cannot round-trip through an IEEE 754 double (RFC 8785); integers are limited to 2^53")]
+    IntegerBeyondDouble { path: String, value: String },
 }
 
 #[derive(Debug, thiserror::Error)]

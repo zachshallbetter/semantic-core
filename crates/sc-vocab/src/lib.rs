@@ -229,6 +229,15 @@ impl Predicate {
         }
     }
 
+    /// Parse a predicate a local actor is declaring: registered or a
+    /// namespaced extension. Unknown names are refused rather than stored.
+    pub fn parse_for_declaration(text: &str) -> Result<Self, VocabError> {
+        match Self::parse(text)? {
+            Self::Unknown(name) => Err(VocabError::Unregistered(name)),
+            other => Ok(other),
+        }
+    }
+
     /// Whether relationships under this predicate take part in the
     /// materialized graph.
     pub fn materializes(&self) -> bool {
@@ -299,6 +308,8 @@ pub enum VocabError {
     Empty,
     #[error("malformed predicate {0:?}: extensions are x-<namespace>:NAME")]
     MalformedExtension(String),
+    #[error("predicate {0:?} is not in {VOCAB_VERSION} and is not a namespaced extension (x-<namespace>:NAME); unregistered predicates arrive only through import, preserved as x-unknown:NAME")]
+    Unregistered(String),
     #[error("{predicate} does not accept a {class} as its source")]
     SourceClass {
         predicate: &'static str,
@@ -384,6 +395,22 @@ mod tests {
         assert!(matches!(Predicate::parse("x-archive"), Err(VocabError::MalformedExtension(_))));
         assert!(matches!(Predicate::parse("x-:NAME"), Err(VocabError::MalformedExtension(_))));
         assert!(matches!(Predicate::parse("has space"), Err(VocabError::MalformedExtension(_))));
+    }
+
+    #[test]
+    fn local_declarations_refuse_unregistered_names() {
+        assert_eq!(
+            Predicate::parse_for_declaration("OWNS"),
+            Err(VocabError::Unregistered("OWNS".into()))
+        );
+        assert_eq!(
+            Predicate::parse_for_declaration("x-unknown:OWNS"),
+            Err(VocabError::Unregistered("OWNS".into()))
+        );
+        assert!(Predicate::parse_for_declaration("DOCUMENTS").is_ok());
+        assert!(Predicate::parse_for_declaration("x-archive:MEMBER_OF").is_ok());
+        // Import still parses the preserved value.
+        assert_eq!(Predicate::parse("x-unknown:OWNS"), Ok(Predicate::Unknown("OWNS".into())));
     }
 
     #[test]

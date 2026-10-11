@@ -321,3 +321,80 @@ fn sc_event_vectors_are_reproducible() {
         }
     }
 }
+
+#[test]
+fn reflective_rust_envelope_cannot_sign_or_verify_under_the_semantic_core_domain() {
+    let signing = SigningKey::from_bytes(&[7_u8; 32]);
+    // Signing pins the protocol: the conformance vector hashes but does not sign.
+    assert!(matches!(
+        rr_vector().sign("k", &signing),
+        Err(sc_envelope::AuthenticationError::Validation(sc_envelope::ValidationError::UnsupportedSchema(_)))
+    ));
+    // A signature produced some other way over the same bytes does not verify either.
+    let mut payload = sc_envelope::SIGNATURE_DOMAIN.to_vec();
+    payload.extend_from_slice(b"k");
+    payload.push(0);
+    payload.extend_from_slice(rr_vector().canonical_json().unwrap().as_bytes());
+    use ed25519_dalek::Signer;
+    let raw = signing.sign(&payload);
+    use base64::Engine as _;
+    let forged = AuthenticatedEnvelope {
+        envelope: rr_vector(),
+        authentication: sc_envelope::EnvelopeAuthentication {
+            algorithm: sc_envelope::SignatureAlgorithm::Ed25519,
+            key_id: "k".into(),
+            signature: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw.to_bytes()),
+        },
+    };
+    assert!(matches!(
+        forged.verify("k", &signing.verifying_key()),
+        Err(sc_envelope::AuthenticationError::Validation(sc_envelope::ValidationError::UnsupportedSchema(_)))
+    ));
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Counter {
+    count: u64,
+    #[serde(default)]
+    nested: Vec<i64>,
+}
+
+impl Body for Counter {}
+
+#[test]
+fn integers_beyond_2_to_the_53_fail_validation_instead_of_rounding() {
+    let make = |count: u64, nested: Vec<i64>| {
+        Envelope::new(
+            "sc:counter:1",
+            "counter-1",
+            Provenance::new(ProvenanceKind::Declared, "owner-local", "fixture", sc_envelope::hash_bytes(b"c")),
+            AccessLevel::Public,
+            Counter { count, nested },
+        )
+    };
+    // At the bound: accepted, and the canonical form is the plain decimal an
+    // RFC 8785 double serializer would also produce.
+    let at_bound = make(sc_envelope::MAX_CANONICAL_INTEGER, vec![-(1 << 53)]).unwrap();
+    assert!(at_bound.canonical_json().unwrap().contains("\"count\":9007199254740992"));
+    assert!(at_bound.canonical_json().unwrap().contains("[-9007199254740992]"));
+    // One past it: refused, naming the field.
+    let over = make(sc_envelope::MAX_CANONICAL_INTEGER + 1, vec![]).unwrap_err();
+    assert!(matches!(
+        over,
+        sc_envelope::ValidationError::IntegerBeyondDouble { ref path, .. } if path == ".body.count"
+    ), "{over:?}");
+    let nested = make(1, vec![-(1 << 53) - 1]).unwrap_err();
+    assert!(matches!(
+        nested,
+        sc_envelope::ValidationError::IntegerBeyondDouble { ref path, .. } if path == ".body.nested[0]"
+    ));
+    // u64::MAX, the case serde_jcs would otherwise print exactly.
+    assert!(make(u64::MAX, vec![]).is_err());
+    // Parsing an oversized value from JSON is refused at canonicalization too.
+    let mut value = serde_json::to_value(&at_bound).unwrap();
+    value["body"]["count"] = serde_json::json!(18446744073709551615u64);
+    let parsed: Envelope<Counter> = serde_json::from_value(value).unwrap();
+    assert!(parsed.canonical_hash().is_err());
+    assert!(parsed.sign("k", &SigningKey::from_bytes(&[1; 32])).is_err());
+}

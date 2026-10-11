@@ -10,9 +10,10 @@
 //! (D6). Each exported envelope names the local event it came from in
 //! `origin`, so a round trip is idempotent. For the owner that is the stored
 //! hash; for anyone else it is a per-library alias keyed by the library
-//! secret, and `compensates` is aliased the same way, so nothing in a
-//! restricted export is derived from a stored hash the viewer could test
-//! against a recomputed envelope.
+//! secret, and `compensates` and an imported event's own `origin` are
+//! aliased the same way, so no stored hash from any log reaches a non-owner.
+//! Aliases of hashes and of origins are recorded so a returning file is
+//! recognised.
 //!
 //! Import fails closed. Every event is verified against the key bound to its
 //! actor before anything is applied; a file carrying a `PolicyEstablished`
@@ -109,7 +110,7 @@ impl Store {
                 }
             };
             envelope.body.origin = Some(match &event.envelope.body.origin {
-                Some(origin) => origin.clone(),
+                Some(origin) => name(origin)?,
                 None => name(&event.hash)?,
             });
             if let Change::AssertionRetracted { compensates, .. } = &mut envelope.body.change {
@@ -129,7 +130,16 @@ impl Store {
     }
 
     /// Verify and apply an interchange file. All or nothing; idempotent.
-    pub fn import(&mut self, principal: &Principal, interchange: &Interchange, keys: &TrustedKeys) -> Result<ImportReport> {
+    /// `adopt_owner` names the one foreign owner whose changes may be re-based
+    /// onto this library's owner; without it a file naming another owner is
+    /// refused whole.
+    pub fn import(
+        &mut self,
+        principal: &Principal,
+        interchange: &Interchange,
+        keys: &TrustedKeys,
+        adopt_owner: Option<&str>,
+    ) -> Result<ImportReport> {
         self.require_owner(principal)?;
         if interchange.format != INTERCHANGE_FORMAT {
             return Err(Error::Interchange(format!("unsupported format {:?}", interchange.format)));
@@ -175,16 +185,23 @@ impl Store {
                     )));
                 }
             }
-            let replaced = change.rewrite_owner(&owner);
-            let source_owner = match replaced.len() {
-                0 => None,
-                1 => {
+            let foreign: BTreeSet<String> = change.owners().into_iter().filter(|o| o != &owner).collect();
+            let source_owner = match (foreign.len(), adopt_owner) {
+                (0, _) => None,
+                (1, Some(adopt)) if foreign.contains(adopt) => {
+                    change.rewrite_owner(&owner);
                     report.rebased += 1;
-                    replaced.into_iter().next()
+                    foreign.into_iter().next()
+                }
+                (1, _) => {
+                    let name = foreign.into_iter().next().unwrap_or_default();
+                    return Err(Error::Interchange(format!(
+                        "event {index} is owned by {name:?}; this library is owned by {owner:?}. Pass adopt-owner {name:?} to re-base the file onto {owner:?}; the source owner is then recorded on every event"
+                    )));
                 }
                 _ => {
                     return Err(Error::Interchange(format!(
-                        "event {index} names more than one owner: {replaced:?}"
+                        "event {index} names more than one owner: {foreign:?}"
                     )))
                 }
             };

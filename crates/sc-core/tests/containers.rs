@@ -247,6 +247,7 @@ fn extracted_member_is_a_distinct_derived_instance() {
                 location: location("vol-robin", "doc-extracted", "/Volumes/Robin/Desktop/warranty.txt"),
                 content_hash: Some(mounted.members[0].hash.clone()),
                 source: "scan".into(),
+                window: None,
             },
         )
         .unwrap();

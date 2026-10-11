@@ -294,6 +294,7 @@ pub fn run_scenario(path: &Path) -> Run {
                             location,
                             content_hash: step.hash.as_deref().map(hash),
                             source: "fixture".into(),
+                            window: None,
                         },
                     )
                     .expect(&context);

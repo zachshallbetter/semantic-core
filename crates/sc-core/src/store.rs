@@ -98,7 +98,8 @@ impl Store {
         {
             let salt = salt_in(&conn)?;
             let mut missing = conn.prepare(
-                "SELECT hash FROM events WHERE hash NOT IN (SELECT hash FROM event_aliases) ORDER BY seq",
+                "SELECT hash FROM events WHERE hash NOT IN (SELECT hash FROM event_aliases)
+                 UNION SELECT origin FROM events WHERE origin IS NOT NULL AND origin NOT IN (SELECT hash FROM event_aliases)",
             )?;
             let hashes: Vec<String> = missing.query_map([], |row| row.get(0))?.collect::<std::result::Result<_, _>>()?;
             for hash in hashes {
@@ -295,7 +296,13 @@ impl Store {
             "INSERT OR IGNORE INTO event_aliases (hash, alias) VALUES (?1, ?2)",
             params![hash, alias_for(&salt, &hash)],
         )?;
-        Self::apply(tx, &record.change, &hash)?;
+        if let Some(origin) = &record.origin {
+            tx.execute(
+                "INSERT OR IGNORE INTO event_aliases (hash, alias) VALUES (?1, ?2)",
+                params![origin, alias_for(&salt, origin)],
+            )?;
+        }
+        Self::apply(tx, &record.change, &record.at)?;
         Ok(Event { seq, hash, envelope })
     }
 
@@ -307,6 +314,9 @@ impl Store {
             event.seq = position as i64;
             event.envelope.body.previous = None;
             event.hash = self.viewer_event_id(principal, &event.hash)?;
+            if let Some(origin) = &mut event.envelope.body.origin {
+                *origin = self.viewer_event_id(principal, origin)?;
+            }
             if let Change::AssertionRetracted { compensates, .. } = &mut event.envelope.body.change {
                 *compensates = self.viewer_event_id(principal, compensates)?;
             }
@@ -400,7 +410,7 @@ impl Store {
             tx.execute(&format!("DELETE FROM {table}"), [])?;
         }
         for event in &events {
-            Self::apply(&tx, &event.envelope.body.change, &event.hash)?;
+            Self::apply(&tx, &event.envelope.body.change, &event.envelope.body.at)?;
         }
         tx.commit()?;
         Ok(events.len())
@@ -408,7 +418,7 @@ impl Store {
 
     // --------------------------------------------------------- materializer
 
-    pub(crate) fn apply(tx: &Transaction<'_>, change: &Change, _hash: &str) -> Result<()> {
+    pub(crate) fn apply(tx: &Transaction<'_>, change: &Change, at: &str) -> Result<()> {
         match change {
             Change::PolicyEstablished { authority, owner } => {
                 tx.execute(
@@ -476,6 +486,19 @@ impl Store {
                 )?;
             }
             Change::ObservationRecorded { observation, resolution } => {
+                // Freshness binds again on replay and import: a resolution
+                // may not rest on an observation that had expired when the
+                // event was recorded.
+                if resolution.outcome == Outcome::Resolved {
+                    let expires = sc_envelope::parse_timestamp("observation.expires_at", Some(&observation.expires_at))?;
+                    let recorded = sc_envelope::parse_timestamp("body.at", Some(at))?;
+                    if recorded >= expires {
+                        return Err(Error::Integrity(format!(
+                            "observation {} expired at {} but drove resolution {} recorded at {at}",
+                            observation.id, observation.expires_at, resolution.id
+                        )));
+                    }
+                }
                 tx.execute(
                     "INSERT INTO observations (id, doc) VALUES (?1, ?2)",
                     params![observation.id, json(observation)?],

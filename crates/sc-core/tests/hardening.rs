@@ -100,6 +100,7 @@ fn collection_reads_apply_the_row_rule_after_a_child_is_narrowed() {
                 location: location("vol-leo", "doc-9", "/Volumes/Leo/Manual.pdf"),
                 content_hash: Some(hash("manual")),
                 source: "scan".into(),
+                window: None,
             },
         )
         .unwrap();
@@ -227,7 +228,7 @@ fn unregistered_predicates_are_refused_locally_and_inert_when_imported() {
     }
     let mut target = fixed_store();
     target
-        .import(&p, &export, &TrustedKeys::new().trust(OWNER, "k", signing.verifying_key()))
+        .import(&p, &export, &TrustedKeys::new().trust(OWNER, "k", signing.verifying_key()), None)
         .unwrap();
     let imported = target.get_relationship(&p, &relationship.id).unwrap();
     assert_eq!(imported.predicate, "x-unknown:OWNS");
@@ -403,21 +404,21 @@ fn resolutions_follow_one_rule_directly_and_in_collections() {
         .unwrap();
     // RESOLVED, naming a visible instance: readable both ways.
     let seen_shared = store
-        .observe(&p, Seen { location: location("vol-robin", "doc-1", "/Volumes/Robin/Kitchen/Manual.pdf"), content_hash: None, source: "scan".into() })
+        .observe(&p, Seen { location: location("vol-robin", "doc-1", "/Volumes/Robin/Kitchen/Manual.pdf"), content_hash: None, source: "scan".into(), window: None })
         .unwrap();
     assert_eq!(seen_shared.outcome, Outcome::Resolved);
     store.get_resolution(&robin, &seen_shared.id).unwrap();
     assert!(store.resolutions_for_instance(&robin, &shared.id).unwrap().iter().any(|r| r.id == seen_shared.id));
     // RESOLVED, naming a hidden instance: withheld both ways.
     let seen_hidden = store
-        .observe(&p, Seen { location: location("vol-robin", "doc-2", "/Volumes/Robin/Private/Tax.pdf"), content_hash: None, source: "scan".into() })
+        .observe(&p, Seen { location: location("vol-robin", "doc-2", "/Volumes/Robin/Private/Tax.pdf"), content_hash: None, source: "scan".into(), window: None })
         .unwrap();
     assert!(matches!(store.get_resolution(&robin, &seen_hidden.id), Err(Error::NotFound(_))));
     assert!(matches!(store.resolutions_for_instance(&robin, &hidden.id), Err(Error::NotFound(_))));
     store.get_resolution(&p, &seen_hidden.id).unwrap();
     // UNRESOLVED, naming nothing: the owner's alone.
     let nothing = store
-        .observe(&p, Seen { location: location("vol-leo", "doc-9", "/Volumes/Leo/x.pdf"), content_hash: Some(hash("x")), source: "scan".into() })
+        .observe(&p, Seen { location: location("vol-leo", "doc-9", "/Volumes/Leo/x.pdf"), content_hash: Some(hash("x")), source: "scan".into(), window: None })
         .unwrap();
     assert_eq!(nothing.outcome, Outcome::Unresolved);
     assert!(matches!(store.get_resolution(&robin, &nothing.id), Err(Error::NotFound(_))));
@@ -518,12 +519,12 @@ fn a_restricted_export_carries_no_stored_hash_and_still_round_trips() {
         }
     }
     // Coming back to the library it left, every event is recognised.
-    let report = store.import(&p, &export, &keys()).unwrap();
+    let report = store.import(&p, &export, &keys(), None).unwrap();
     assert_eq!(report.applied, 0, "{report:?}");
     // And it imports into another library once.
     let mut other = fixed_store();
-    assert!(other.import(&p, &export, &keys()).unwrap().applied > 0);
-    assert_eq!(other.import(&p, &export, &keys()).unwrap().applied, 0);
+    assert!(other.import(&p, &export, &keys(), None).unwrap().applied > 0);
+    assert_eq!(other.import(&p, &export, &keys(), None).unwrap().applied, 0);
     // The owner's own export names stored hashes, for the owner.
     let owner_export = store.export(&p, "k", &signing).unwrap();
     assert!(owner_export.events.iter().any(|e| e.envelope.body.origin.as_deref().is_some_and(|o| o.starts_with("sha256:"))));

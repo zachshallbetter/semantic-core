@@ -1,7 +1,7 @@
 # Semantic Core — build brief
 
 **Date:** 2026-10-10
-**Status:** Decided, not started. Start when Zach says go. Everything below was answered by Zach on 2026-10-10.
+**Status:** Started 2026-10-10. Repository: https://github.com/zachshallbetter/semantic-core (public). Task 1 done on main; tasks 2 to 7 in progress on branch `stage1-rust-core` from a cloud session. Everything below was answered by Zach on 2026-10-10.
 **Definition of record:** [semantic-core-definition-v0.2.2.md](semantic-core-definition-v0.2.2.md)
 **History:** [thought-experiment-2026-10-10.md](thought-experiment-2026-10-10.md)
 

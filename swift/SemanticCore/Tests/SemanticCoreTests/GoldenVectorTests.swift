@@ -171,6 +171,55 @@ final class GoldenVectorTests: XCTestCase {
         XCTAssertThrowsError(try JCS.canonicalize(#"{"n":1.5}"#))
         XCTAssertThrowsError(try JCS.canonicalize(#"{"a":1,"a":2}"#))
         // Surrogate pairs decode to one scalar and are emitted raw.
-        XCTAssertEqual(try JCS.canonicalize(#""😀""#), "\"\u{1F600}\"")
+        XCTAssertEqual(try JCS.canonicalize(#""\ud83d\ude00""#), "\"\u{1F600}\"")
+        // Control characters escape with lowercase hex; the short forms win where the RFC has them.
+        XCTAssertEqual(try JCS.canonicalize(#""\u0001\u000A\u001F""#), "\"\\u0001\\n\\u001f\"")
+    }
+
+    func testKeysSortByUTF16CodeUnitsNotScalars() throws {
+        // U+FF61 is one code unit (0xFF61); U+1F600 is a surrogate pair
+        // starting 0xD83D. UTF-16 order puts the emoji first; scalar order
+        // would put it last.
+        let emoji = "\u{1F600}"
+        let halfwidth = "\u{FF61}"
+        XCTAssertEqual(try JCS.canonicalize("{\"" + halfwidth + "\":2,\"" + emoji + "\":1}"),
+                       "{\"" + emoji + "\":1,\"" + halfwidth + "\":2}")
+        // The same with both keys written as escapes, the emoji as a surrogate pair.
+        XCTAssertEqual(try JCS.canonicalize(#"{"\uff61":2,"\ud83d\ude00":1}"#),
+                       "{\"" + emoji + "\":1,\"" + halfwidth + "\":2}")
+        // Canonically equivalent keys are distinct keys, sorted by code units.
+        let composed = "\u{E9}"
+        let decomposed = "e\u{301}"
+        XCTAssertEqual(composed, decomposed, "Swift's String == is canonical equivalence")
+        XCTAssertEqual(try JCS.canonicalize("{\"" + composed + "\":1,\"" + decomposed + "\":2}"),
+                       "{\"" + decomposed + "\":2,\"" + composed + "\":1}")
+        XCTAssertThrowsError(try JCS.canonicalize("{\"" + composed + "\":1,\"" + composed + "\":2}"))
+    }
+
+    func testStringsWithNULNeverCrossTheBoundary() throws {
+        let (file, envelopeJSON) = try load("sc-event-0.1-derived-signed.json")
+        let vector = try XCTUnwrap(file.signature)
+        let publicKey = try XCTUnwrap(Data(hex: vector.verifying_key_hex))
+        let authenticated = authenticatedJSON(envelopeJSON: envelopeJSON, keyID: vector.key_id, signature: vector.signature)
+        XCTAssertNoThrow(try Signature.verify(signedJSON: authenticated, keyID: vector.key_id, publicKey: publicKey))
+        // "<key id>\0x" would reach C as "<key id>" and verify; it must be refused.
+        let argument = { (error: Error) in
+            XCTAssertEqual((error as? SemanticCoreError)?.code, .argument)
+            XCTAssertTrue((error as? SemanticCoreError)?.message.contains("NUL") == true)
+        }
+        let nul = "\u{0}"
+        XCTAssertThrowsError(try Signature.verify(signedJSON: authenticated, keyID: vector.key_id + nul + "x", publicKey: publicKey), "", argument)
+        XCTAssertThrowsError(try Signature.verify(signedJSON: authenticated + nul, keyID: vector.key_id, publicKey: publicKey), "", argument)
+        XCTAssertThrowsError(try Envelope.hash(of: envelopeJSON + nul), "", argument)
+        XCTAssertThrowsError(try Envelope.validate(envelopeJSON + nul), "", argument)
+        let seed = try XCTUnwrap(Data(hex: vector.seed_hex))
+        XCTAssertThrowsError(try Signature.sign(envelopeJSON: envelopeJSON, keyID: "k" + nul, seed: seed), "", argument)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("semantic-core-nul-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try Store(path: directory.appendingPathComponent("library.sqlite").path, owner: "ava")
+        XCTAssertThrowsError(try store.addThing(label: "Dish" + nul + "washer"), "", argument)
+        XCTAssertThrowsError(try store.inspect("x" + nul), "", argument)
+        XCTAssertThrowsError(try Store(path: directory.path + nul, owner: "ava"), "", argument)
     }
 }

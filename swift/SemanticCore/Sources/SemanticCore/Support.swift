@@ -41,6 +41,16 @@ func check(_ code: Int32) throws {
     )
 }
 
+/// A string about to cross the boundary. C strings end at the first NUL, so
+/// a Swift string containing one would be silently truncated on the other
+/// side; refuse it here instead.
+func boundary(_ value: String, _ what: String) throws -> String {
+    if value.utf8.contains(0) {
+        throw SemanticCoreError(code: .argument, rawCode: 1, message: "\(what) contains a NUL byte")
+    }
+    return value
+}
+
 /// Take ownership of a string the core returned and free it.
 func take(_ pointer: UnsafeMutablePointer<CChar>?) -> String {
     guard let pointer else { return "" }

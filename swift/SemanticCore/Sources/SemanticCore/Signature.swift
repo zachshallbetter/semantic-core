@@ -11,9 +11,11 @@ public enum Signature {
     /// authenticated envelope as JSON.
     public static func sign(envelopeJSON: String, keyID: String, seed: Data) throws -> String {
         let bytes = try thirtyTwo(seed, "seed")
+        let json = try boundary(envelopeJSON, "envelope")
+        let id = try boundary(keyID, "key id")
         return try call { out in
             bytes.withUnsafeBufferPointer { seedPointer in
-                sc_envelope_sign(envelopeJSON, keyID, seedPointer.baseAddress, out)
+                sc_envelope_sign(json, id, seedPointer.baseAddress, out)
             }
         }
     }
@@ -22,8 +24,10 @@ public enum Signature {
     /// public key. Throws `.authentication` when the signature does not hold.
     public static func verify(signedJSON: String, keyID: String, publicKey: Data) throws {
         let bytes = try thirtyTwo(publicKey, "public key")
+        let json = try boundary(signedJSON, "signed envelope")
+        let id = try boundary(keyID, "key id")
         let code = bytes.withUnsafeBufferPointer { keyPointer in
-            sc_envelope_verify(signedJSON, keyID, keyPointer.baseAddress)
+            sc_envelope_verify(json, id, keyPointer.baseAddress)
         }
         try check(code)
     }

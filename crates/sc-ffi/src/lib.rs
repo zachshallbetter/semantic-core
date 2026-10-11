@@ -183,6 +183,14 @@ unsafe fn give(out: *mut *mut c_char, value: String) -> FfiResult<()> {
     }
 }
 
+/// Refuse a null out-pointer before anything is mutated.
+fn require_out(out: *mut *mut c_char) -> FfiResult<()> {
+    if out.is_null() {
+        return fail(SC_ERR_ARGUMENT, "out pointer is null");
+    }
+    Ok(())
+}
+
 fn give_json<T: Serialize>(out: *mut *mut c_char, value: &T) -> FfiResult<()> {
     let text = serde_json::to_string(value)?;
     // SAFETY: `out` is checked inside `give`.
@@ -211,27 +219,32 @@ fn parse_envelope(json: &str) -> FfiResult<Envelope<JsonBody>> {
 /// `s` is null or a pointer previously returned by this library and not yet freed.
 #[no_mangle]
 pub unsafe extern "C" fn sc_string_free(s: *mut c_char) {
-    if !s.is_null() {
-        drop(CString::from_raw(s));
-    }
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        if !s.is_null() {
+            drop(CString::from_raw(s));
+        }
+    }));
 }
 
 /// The message of the last failing call on this thread, or null. Caller frees.
 #[no_mangle]
 pub extern "C" fn sc_last_error() -> *mut c_char {
-    LAST_ERROR.with(|slot| match slot.borrow().as_ref() {
-        Some(message) => CString::new(message.clone())
-            .map(CString::into_raw)
-            .unwrap_or(std::ptr::null_mut()),
-        None => std::ptr::null_mut(),
+    catch_unwind(|| {
+        LAST_ERROR.with(|slot| match slot.borrow().as_ref() {
+            Some(message) => CString::new(message.clone())
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut()),
+            None => std::ptr::null_mut(),
+        })
     })
+    .unwrap_or(std::ptr::null_mut())
 }
 
 /// The crate version, a static string the caller must not free.
 #[no_mangle]
 pub extern "C" fn sc_version() -> *const c_char {
     static VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
-    VERSION.as_ptr() as *const c_char
+    catch_unwind(|| VERSION.as_ptr() as *const c_char).unwrap_or(std::ptr::null())
 }
 
 // ------------------------------------------------------------- envelope
@@ -352,9 +365,11 @@ pub unsafe extern "C" fn sc_store_open(path: *const c_char, owner: *const c_char
 /// `handle` is null or a live handle not yet closed.
 #[no_mangle]
 pub unsafe extern "C" fn sc_store_close(handle: *mut ScStore) {
-    if !handle.is_null() {
-        drop(Box::from_raw(handle));
-    }
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        if !handle.is_null() {
+            drop(Box::from_raw(handle));
+        }
+    }));
 }
 
 /// # Safety
@@ -362,6 +377,7 @@ pub unsafe extern "C" fn sc_store_close(handle: *mut ScStore) {
 #[no_mangle]
 pub unsafe extern "C" fn sc_store_add_thing(handle: *mut ScStore, label: *const c_char, out_id: *mut *mut c_char) -> i32 {
     guard(|| {
+        require_out(out_id)?;
         let sc = store(handle)?;
         let label = text(label, "label")?;
         let thing = sc.store.create_thing(&sc.principal, label, Default::default())?;
@@ -405,6 +421,7 @@ pub unsafe extern "C" fn sc_store_add_file(
     out_json: *mut *mut c_char,
 ) -> i32 {
     guard(|| {
+        require_out(out_json)?;
         let sc = store(handle)?;
         let path = text(path, "path")?;
         let (location, hash) = location_for(path, text(volume, "volume")?, text(document, "document")?)?;
@@ -443,6 +460,7 @@ pub unsafe extern "C" fn sc_store_link(
     out_json: *mut *mut c_char,
 ) -> i32 {
     guard(|| {
+        require_out(out_json)?;
         let sc = store(handle)?;
         let (relationship, assertion) = sc.store.link(
             &sc.principal,
@@ -477,6 +495,7 @@ pub unsafe extern "C" fn sc_store_resolve(
     out_json: *mut *mut c_char,
 ) -> i32 {
     guard(|| {
+        require_out(out_json)?;
         let sc = store(handle)?;
         let path = text(path, "path")?;
         let (location, content_hash) = location_for(path, text(volume, "volume")?, text(document, "document")?)?;
@@ -500,6 +519,7 @@ pub unsafe extern "C" fn sc_store_resolve(
 #[no_mangle]
 pub unsafe extern "C" fn sc_store_gone(handle: *mut ScStore, instance_id: *const c_char, out_json: *mut *mut c_char) -> i32 {
     guard(|| {
+        require_out(out_json)?;
         let sc = store(handle)?;
         let resolution = sc.store.observe_gone(&sc.principal, text(instance_id, "instance_id")?, "sc-ffi")?;
         give_json(out_json, &resolution)
@@ -558,6 +578,7 @@ pub unsafe extern "C" fn sc_store_retract(
     out_json: *mut *mut c_char,
 ) -> i32 {
     guard(|| {
+        require_out(out_json)?;
         let sc = store(handle)?;
         let assertion_id = text(assertion_id, "assertion_id")?;
         let reason = if reason.is_null() { "retracted" } else { text(reason, "reason")? };
@@ -643,6 +664,45 @@ mod tests {
         assert_eq!(unsafe { sc_envelope_hash(std::ptr::null(), &mut signed) }, SC_ERR_ARGUMENT);
         assert_eq!(unsafe { sc_envelope_hash(c("{").as_ptr(), &mut signed) }, SC_ERR_VALIDATION);
         assert!(last_error().starts_with("json:"));
+    }
+
+    #[test]
+    fn a_null_out_pointer_is_refused_before_anything_is_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("library.sqlite");
+        let file = dir.path().join("Warranty.txt");
+        std::fs::write(&file, "warranty").unwrap();
+        let mut handle: *mut ScStore = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { sc_store_open(c(db.to_str().unwrap()).as_ptr(), c("ava").as_ptr(), &mut handle) },
+            SC_OK
+        );
+        let null: *mut *mut c_char = std::ptr::null_mut();
+        let path = c(file.to_str().unwrap());
+        assert_eq!(unsafe { sc_store_add_thing(handle, c("Dishwasher").as_ptr(), null) }, SC_ERR_ARGUMENT);
+        assert_eq!(
+            unsafe { sc_store_add_file(handle, path.as_ptr(), c("vol").as_ptr(), c("doc").as_ptr(), null) },
+            SC_ERR_ARGUMENT
+        );
+        assert_eq!(
+            unsafe { sc_store_link(handle, c("a").as_ptr(), c("DOCUMENTS").as_ptr(), c("b").as_ptr(), null) },
+            SC_ERR_ARGUMENT
+        );
+        assert_eq!(
+            unsafe { sc_store_resolve(handle, path.as_ptr(), c("vol").as_ptr(), c("doc").as_ptr(), null) },
+            SC_ERR_ARGUMENT
+        );
+        assert_eq!(unsafe { sc_store_gone(handle, c("x").as_ptr(), null) }, SC_ERR_ARGUMENT);
+        assert_eq!(unsafe { sc_store_retract(handle, c("x").as_ptr(), std::ptr::null(), null) }, SC_ERR_ARGUMENT);
+        assert_eq!(last_error(), "out pointer is null");
+        unsafe { sc_store_close(handle) };
+        // Only the policy event exists: nothing above was written.
+        let store = Store::open(&db).unwrap();
+        assert_eq!(store.events(&store.owner_principal()).unwrap().len(), 1);
+        assert!(store.search(&store.owner_principal(), "").unwrap().is_empty());
+        // The pointer entry points stay quiet on null and on nothing to report.
+        unsafe { sc_string_free(std::ptr::null_mut()) };
+        assert!(!sc_version().is_null());
     }
 
     #[test]

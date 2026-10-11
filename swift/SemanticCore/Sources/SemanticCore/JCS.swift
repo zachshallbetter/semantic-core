@@ -163,7 +163,10 @@ public enum JCS {
                 index += 1
                 skipWhitespace()
                 let value = try parseValue()
-                if members.contains(where: { $0.0 == key }) { throw Error.syntax("duplicate key \(key)") }
+                // Duplicates are judged by code units, not by canonical
+                // equivalence: "é" and "e\u{301}" are different keys.
+                let units = Array(key.utf16)
+                if members.contains(where: { Array($0.0.utf16) == units }) { throw Error.syntax("duplicate key \(key)") }
                 members.append((key, value))
                 skipWhitespace()
                 guard !atEnd else { throw Error.syntax("unterminated object") }

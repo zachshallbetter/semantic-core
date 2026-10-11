@@ -8,6 +8,8 @@ public final class Store {
 
     /// Open the library at `path`, creating it for `owner` when it does not exist.
     public init(path: String, owner: String) throws {
+        let path = try boundary(path, "path")
+        let owner = try boundary(owner, "owner")
         var out: OpaquePointer? = nil
         let code = withUnsafeMutablePointer(to: &out) { sc_store_open(path, owner, $0) }
         try check(code)
@@ -89,28 +91,40 @@ public final class Store {
     }
 
     public func addThing(label: String) throws -> String {
-        try call { out in sc_store_add_thing(handle, label, out) }
+        let label = try boundary(label, "label")
+        return try call { out in sc_store_add_thing(handle, label, out) }
     }
 
     public func addFile(path: String, volume: String, document: String) throws -> FileRecord {
-        try decode(FileRecord.self, from: try call { out in sc_store_add_file(handle, path, volume, document, out) })
+        let path = try boundary(path, "path")
+        let volume = try boundary(volume, "volume")
+        let document = try boundary(document, "document")
+        return try decode(FileRecord.self, from: try call { out in sc_store_add_file(handle, path, volume, document, out) })
     }
 
     public func link(source: String, predicate: String, target: String) throws -> LinkRecord {
-        try decode(LinkRecord.self, from: try call { out in sc_store_link(handle, source, predicate, target, out) })
+        let source = try boundary(source, "source")
+        let predicate = try boundary(predicate, "predicate")
+        let target = try boundary(target, "target")
+        return try decode(LinkRecord.self, from: try call { out in sc_store_link(handle, source, predicate, target, out) })
     }
 
     public func resolve(path: String, volume: String, document: String) throws -> Resolution {
-        try decode(Resolution.self, from: try call { out in sc_store_resolve(handle, path, volume, document, out) })
+        let path = try boundary(path, "path")
+        let volume = try boundary(volume, "volume")
+        let document = try boundary(document, "document")
+        return try decode(Resolution.self, from: try call { out in sc_store_resolve(handle, path, volume, document, out) })
     }
 
     public func gone(instance: String) throws -> Resolution {
-        try decode(Resolution.self, from: try call { out in sc_store_gone(handle, instance, out) })
+        let instance = try boundary(instance, "instance")
+        return try decode(Resolution.self, from: try call { out in sc_store_gone(handle, instance, out) })
     }
 
     /// The inspection as JSON text, mirroring the core's `Inspection`.
     public func inspectJSON(_ id: String) throws -> String {
-        try call { out in sc_store_inspect(handle, id, out) }
+        let id = try boundary(id, "id")
+        return try call { out in sc_store_inspect(handle, id, out) }
     }
 
     public func inspect(_ id: String) throws -> JSONObject {
@@ -118,7 +132,8 @@ public final class Store {
     }
 
     public func whyJSON(relationship: String) throws -> String {
-        try call { out in sc_store_why(handle, relationship, out) }
+        let relationship = try boundary(relationship, "relationship")
+        return try call { out in sc_store_why(handle, relationship, out) }
     }
 
     public func why(relationship: String) throws -> JSONObject {
@@ -126,11 +141,14 @@ public final class Store {
     }
 
     public func history(_ id: String) throws -> [JSONObject] {
-        try decode([JSONObject].self, from: try call { out in sc_store_history(handle, id, out) })
+        let id = try boundary(id, "id")
+        return try decode([JSONObject].self, from: try call { out in sc_store_history(handle, id, out) })
     }
 
     public func retract(assertion: String, reason: String? = nil) throws -> RetractRecord {
-        try decode(RetractRecord.self, from: try call { out in sc_store_retract(handle, assertion, reason, out) })
+        let assertion = try boundary(assertion, "assertion")
+        let reason = try reason.map { try boundary($0, "reason") }
+        return try decode(RetractRecord.self, from: try call { out in sc_store_retract(handle, assertion, reason, out) })
     }
 }
 

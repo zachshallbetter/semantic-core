@@ -487,11 +487,18 @@ impl Store {
             }
             Change::ObservationRecorded { observation, resolution } => {
                 // Freshness binds again on replay and import: a resolution
-                // may not rest on an observation that had expired when the
-                // event was recorded.
+                // may not rest on an observation whose window had not opened,
+                // or had closed, when the event was recorded.
                 if resolution.outcome == Outcome::Resolved {
+                    let observed = sc_envelope::parse_timestamp("observation.observed_at", Some(&observation.observed_at))?;
                     let expires = sc_envelope::parse_timestamp("observation.expires_at", Some(&observation.expires_at))?;
                     let recorded = sc_envelope::parse_timestamp("body.at", Some(at))?;
+                    if recorded < observed {
+                        return Err(Error::Integrity(format!(
+                            "observation {} is not valid before {} but drove resolution {} recorded at {at}",
+                            observation.id, observation.observed_at, resolution.id
+                        )));
+                    }
                     if recorded >= expires {
                         return Err(Error::Integrity(format!(
                             "observation {} expired at {} but drove resolution {} recorded at {at}",

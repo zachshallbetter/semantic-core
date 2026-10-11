@@ -202,6 +202,8 @@ impl Store {
             authority: self.authority.clone(),
             at: at.clone(),
             origin,
+            imported_at: None,
+            source_owner: None,
             change,
         };
         let envelope = Self::envelope_for(record, kind, window, audience)?;

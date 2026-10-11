@@ -43,7 +43,7 @@ pub use containers::MemberSpec;
 pub use error::{Error, Result};
 pub use events::{Change, Event, EventEnvelope, EventRecord, EVENT_SCHEMA};
 pub use graph::{Direction, Inspection, RelationshipView, SearchHit, Why};
-pub use interchange::{ImportReport, Interchange, INTERCHANGE_FORMAT};
+pub use interchange::{ImportReport, Interchange, TrustedKeys, INTERCHANGE_FORMAT};
 pub use model::*;
 pub use resolver::Seen;
 pub use store::{Kind, Store, OWNER_LOCAL};

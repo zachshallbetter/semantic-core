@@ -180,6 +180,50 @@ impl Change {
     }
 }
 
+impl Change {
+    /// Every `Access` block carried by the change.
+    pub fn access_blocks_mut(&mut self) -> Vec<&mut Access> {
+        match self {
+            Change::ThingCreated { thing } => vec![&mut thing.access],
+            Change::ArtifactCreated { artifact } => vec![&mut artifact.access],
+            Change::RevisionCreated { revision } => vec![&mut revision.access],
+            Change::InstanceRegistered { instance } => vec![&mut instance.access],
+            Change::PresentationMounted { presentation } => vec![&mut presentation.access],
+            Change::RelationshipDeclared { relationship } => vec![&mut relationship.access],
+            Change::AssertionProposed { assertion } => vec![&mut assertion.access],
+            _ => vec![],
+        }
+    }
+
+    /// Owners named by the change's access blocks.
+    pub fn owners(&self) -> std::collections::BTreeSet<String> {
+        let mut copy = self.clone();
+        copy.access_blocks_mut().into_iter().map(|a| a.owner.clone()).collect()
+    }
+
+    /// Re-base every access block onto `owner`. Returns the owners replaced.
+    pub fn rewrite_owner(&mut self, owner: &str) -> std::collections::BTreeSet<String> {
+        let mut replaced = std::collections::BTreeSet::new();
+        for access in self.access_blocks_mut() {
+            if access.owner != owner {
+                replaced.insert(std::mem::replace(&mut access.owner, owner.to_string()));
+            }
+        }
+        replaced
+    }
+
+    /// Replace raw audience labels with the disclosure projection that
+    /// leaves the device (D6).
+    pub fn project_access(&mut self) {
+        for access in self.access_blocks_mut() {
+            access.audience = projected_audience(&access.audience);
+        }
+        if let Change::AudienceChanged { audience, .. } = self {
+            *audience = projected_audience(audience);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntityClassOrOther {
     Entity(EntityClass),
@@ -218,6 +262,14 @@ pub struct EventRecord {
     /// entered through `import`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// When the event entered this log through `import`; `at` keeps the
+    /// source's time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_at: Option<String>,
+    /// The owner named by the source when import re-based the change onto
+    /// the local owner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_owner: Option<String>,
     pub change: Change,
 }
 
@@ -231,6 +283,9 @@ impl Body for EventRecord {
         }
         if let Some(origin) = &self.origin {
             sc_envelope::require_sha256("body.origin", origin)?;
+        }
+        if let Some(imported_at) = &self.imported_at {
+            sc_envelope::parse_timestamp("body.imported_at", Some(imported_at))?;
         }
         Ok(())
     }

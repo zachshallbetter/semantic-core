@@ -51,6 +51,16 @@ pub fn project_audience(audience: &BTreeSet<String>) -> AccessLevel {
     }
 }
 
+/// The audience set that leaves the device (D6): raw household labels are
+/// replaced by the disclosure level they project to.
+pub fn projected_audience(audience: &BTreeSet<String>) -> BTreeSet<String> {
+    match project_audience(audience) {
+        AccessLevel::Public => BTreeSet::from([PUBLIC_AUDIENCE.to_string()]),
+        AccessLevel::Owner => BTreeSet::new(),
+        AccessLevel::Member | AccessLevel::Administrator => BTreeSet::from([AccessLevel::Member.as_str().to_string()]),
+    }
+}
+
 /// Shared ownership and audience fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -395,6 +405,9 @@ impl fmt::Display for Outcome {
 pub enum Rule {
     /// `(volume UUID, document identifier)` matched a known instance.
     WithinVolumeKey,
+    /// `(volume UUID, document identifier)` matched more than one known
+    /// instance, which the registry should never hold.
+    WithinVolumeKeyCollision,
     /// Exactly one candidate matched the content hash and the previously known
     /// instance of that revision was gone.
     ContentHashSingleCandidatePreviousGone,
@@ -416,6 +429,7 @@ impl Rule {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::WithinVolumeKey => "within-volume-key",
+            Self::WithinVolumeKeyCollision => "within-volume-key-collision",
             Self::ContentHashSingleCandidatePreviousGone => "content-hash-single-candidate-previous-gone",
             Self::ContentHashMultipleCandidates => "content-hash-multiple-candidates",
             Self::ContentHashCandidateStillPresent => "content-hash-candidate-still-present",

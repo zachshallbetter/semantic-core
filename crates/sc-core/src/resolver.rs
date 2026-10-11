@@ -143,28 +143,28 @@ impl Store {
                 evidence.push(Evidence::new("status", format!("{} -> present", instance.status.as_str())));
             }
             let revision: Revision = self.read("revisions", &instance.revision_id)?;
-            let mut new_revision_id = None;
-            let mut content_changed = false;
+            let mut changed_to = None;
             if let (Some(seen_hash), Some(known_hash)) = (&seen.content_hash, &revision.content_hash) {
                 if seen_hash != known_hash {
-                    content_changed = true;
                     evidence.push(Evidence::new("content-changed", format!("{known_hash} -> {seen_hash}")));
-                    let revision = self.derived_revision(
-                        principal,
-                        &instance.artifact_id,
-                        seen_hash.clone(),
-                        seen.location.size,
-                    )?;
-                    evidence.push(Evidence::new("new-revision", revision.id.clone()));
-                    new_revision_id = Some(revision.id);
+                    changed_to = Some(seen_hash.clone());
                 } else {
                     evidence.push(Evidence::new("content-hash", "unchanged"));
                 }
             }
             let mut resolution = base(Outcome::Resolved, Rule::WithinVolumeKey, evidence);
             resolution.instance_id = Some(instance.id.clone());
-            resolution.content_changed = content_changed;
+            resolution.content_changed = changed_to.is_some();
+            // The observation that justifies the change is committed first;
+            // the derived revision and the instance update follow and name it.
             let resolution = self.record_observation(principal, observation, resolution)?;
+            let new_revision_id = match changed_to {
+                Some(hash) => Some(
+                    self.derived_revision(principal, &instance.artifact_id, hash, seen.location.size)?
+                        .id,
+                ),
+                None => None,
+            };
             self.update_instance(
                 principal,
                 &instance.id,
@@ -176,7 +176,7 @@ impl Store {
             return Ok(resolution);
         }
         if keyed.len() > 1 {
-            let mut resolution = base(Outcome::Ambiguous, Rule::ContentHashMultipleCandidates, evidence);
+            let mut resolution = base(Outcome::Ambiguous, Rule::WithinVolumeKeyCollision, evidence);
             resolution.candidates = keyed.iter().map(|i| i.id.clone()).collect();
             return self.record_observation(principal, observation, resolution);
         }

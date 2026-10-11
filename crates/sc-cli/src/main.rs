@@ -43,7 +43,9 @@ commands
   history <id>
   retract <assertion-id> [--reason <text>]
   export --out <file> --key-id <id> (--key-file <path> | --key-stdin)
-  import <file> --key-id <id> --verifying-key <hex>
+  import <file> --key-id <id> --verifying-key <hex> [--actor <name>]
+                               the key is trusted for --actor (default: the file's exporter) only;
+                               accepted assertions arrive as proposals for the local authority
   verify
 ";
 
@@ -424,8 +426,13 @@ fn run(args: &Args) -> Result<(), String> {
                 .try_into()
                 .map_err(|_| "verifying key must be 32 bytes of hex".to_string())?;
             let key = ed25519_dalek::VerifyingKey::from_bytes(&bytes).map_err(|e| e.to_string())?;
-            let report = store.import(&p, &interchange, &key).map_err(err)?;
-            println!("applied {} skipped {}", report.applied, report.skipped);
+            let actor = args.flag("actor").unwrap_or(&interchange.exporter);
+            let keys = TrustedKeys::new().trust(actor, key_id, key);
+            let report = store.import(&p, &interchange, &keys).map_err(err)?;
+            println!(
+                "applied {} skipped {} acceptances withheld {} rebased {}",
+                report.applied, report.skipped, report.acceptances_withheld, report.rebased
+            );
         }
         "verify" => {
             let (store, _) = open(args)?;

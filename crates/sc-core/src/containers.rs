@@ -44,6 +44,10 @@ impl Store {
     ) -> Result<Presentation> {
         self.require_owner(principal)?;
         sc_envelope::require_sha256("member.hash", &member.hash)?;
+        // Refuse an unrepresentable locator or size before anything is
+        // written, so a refused mount leaves no member artifact behind.
+        sc_envelope::check_integers(&serde_json::to_value(&locator)?, ".locator")?;
+        sc_envelope::check_integers(&serde_json::to_value(member.size)?, ".member.size")?;
         let container = self.get_revision(principal, container_revision_id)?;
         let key = MemberKey {
             container_revision_id: container_revision_id.into(),
@@ -176,9 +180,10 @@ impl Store {
 
     pub fn presentations_of_container(&self, principal: &Principal, container_revision_id: &str) -> Result<Vec<Presentation>> {
         self.require_visible(principal, container_revision_id)?;
-        self.query_docs(
+        let rows: Vec<Presentation> = self.query_docs(
             "SELECT doc FROM presentations WHERE container_revision_id = ?1 ORDER BY rowid",
             params![container_revision_id],
-        )
+        )?;
+        self.retain_visible(principal, rows, |p| &p.id)
     }
 }

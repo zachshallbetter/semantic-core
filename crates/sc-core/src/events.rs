@@ -279,16 +279,35 @@ impl Body for EventRecord {
         sc_envelope::require_nonempty("body.authority", &self.authority)?;
         sc_envelope::parse_timestamp("body.at", Some(&self.at))?;
         if let Some(previous) = &self.previous {
-            sc_envelope::require_sha256("body.previous", previous)?;
+            require_event_ref("body.previous", previous)?;
         }
         if let Some(origin) = &self.origin {
-            sc_envelope::require_sha256("body.origin", origin)?;
+            require_event_ref("body.origin", origin)?;
         }
         if let Some(imported_at) = &self.imported_at {
             sc_envelope::parse_timestamp("body.imported_at", Some(imported_at))?;
         }
         Ok(())
     }
+}
+
+/// An event reference: a stored hash (`sha256:`), a per-library export alias
+/// (`origin:`) or a per-viewer identifier (`view:`), each over 64 hex digits.
+pub fn require_event_ref(field: &'static str, value: &str) -> Result<(), ValidationError> {
+    for prefix in ["sha256:", "origin:", "view:"] {
+        if let Some(digest) = value.strip_prefix(prefix) {
+            return sc_envelope::require_sha256(field, &format!("sha256:{digest}")).map_err(|_| {
+                ValidationError::InvalidValue {
+                    field,
+                    value: value.to_string(),
+                }
+            });
+        }
+    }
+    Err(ValidationError::InvalidValue {
+        field,
+        value: value.to_string(),
+    })
 }
 
 pub type EventEnvelope = sc_envelope::Envelope<EventRecord>;

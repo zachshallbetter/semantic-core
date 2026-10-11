@@ -176,13 +176,7 @@ fn location_for(args: &Args, path: &str) -> Result<Location, String> {
             let metadata = metadata
                 .as_ref()
                 .ok_or_else(|| format!("{path} does not exist; pass --volume and --document"))?;
-            #[cfg(unix)]
-            let (dev, ino) = {
-                use std::os::unix::fs::MetadataExt;
-                (metadata.dev(), metadata.ino())
-            };
-            #[cfg(not(unix))]
-            let (dev, ino) = (0u64, 0u64);
+            let (dev, ino) = fallback_key(metadata)?;
             (
                 volume.map(str::to_string).unwrap_or_else(|| format!("fs-dev:{dev}")),
                 document.map(str::to_string).unwrap_or_else(|| format!("fs-ino:{ino}")),
@@ -212,6 +206,20 @@ fn location_for(args: &Args, path: &str) -> Result<Location, String> {
         size,
         modified_at,
     })
+}
+
+/// Device and inode as a stand-in within-volume key. Only unix exposes
+/// them; elsewhere the caller must pass `--volume` and `--document`, since a
+/// shared placeholder key would make every file resolve to every other.
+#[cfg(unix)]
+fn fallback_key(metadata: &std::fs::Metadata) -> Result<(u64, u64), String> {
+    use std::os::unix::fs::MetadataExt;
+    Ok((metadata.dev(), metadata.ino()))
+}
+
+#[cfg(not(unix))]
+fn fallback_key(_metadata: &std::fs::Metadata) -> Result<(u64, u64), String> {
+    Err("this platform exposes no stable file identifier; pass --volume and --document".to_string())
 }
 
 fn content_hash(args: &Args, path: &str) -> Result<Option<String>, String> {
@@ -435,8 +443,8 @@ fn run(args: &Args) -> Result<(), String> {
             );
         }
         "verify" => {
-            let (store, _) = open(args)?;
-            let count = store.verify_chain().map_err(err)?;
+            let (store, p) = open(args)?;
+            let count = store.verify_chain_as(&p).map_err(err)?;
             println!("chain intact over {count} events");
         }
         other => return Err(format!("unknown command {other}\n{USAGE}")),
@@ -538,6 +546,33 @@ fn describe_event(event: &Event) -> String {
         event.envelope.provenance.kind.as_str(),
         what,
         body.actor,
-        &event.hash[..19]
+        event.hash.get(..19).unwrap_or(&event.hash)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fallback_key;
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_fallback_key_is_the_device_and_inode() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.txt");
+        std::fs::write(&path, "a").unwrap();
+        let metadata = std::fs::metadata(&path).unwrap();
+        let (dev, ino) = fallback_key(&metadata).unwrap();
+        assert_ne!((dev, ino), (0, 0));
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn other_platforms_refuse_to_derive_a_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.txt");
+        std::fs::write(&path, "a").unwrap();
+        let metadata = std::fs::metadata(&path).unwrap();
+        let error = fallback_key(&metadata).unwrap_err();
+        assert!(error.contains("--volume"));
+    }
 }

@@ -380,13 +380,40 @@ impl Store {
         Ok(resolutions)
     }
 
-    /// Every resolution that bound or concerned an instance, oldest first.
+    /// Every resolution that bound an instance or listed it as a candidate,
+    /// oldest first.
     pub fn resolutions_for_instance(&self, principal: &Principal, instance_id: &str) -> Result<Vec<Resolution>> {
         self.require_visible(principal, instance_id)?;
-        self.query_docs(
-            "SELECT doc FROM resolutions WHERE instance_id = ?1 ORDER BY rowid",
-            params![instance_id],
-        )
+        // Bound to the instance, or listing it as a candidate.
+        let rows: Vec<Resolution> = self.query_docs("SELECT doc FROM resolutions ORDER BY rowid", [])?;
+        let rows: Vec<Resolution> = rows
+            .into_iter()
+            .filter(|r| r.instance_id.as_deref() == Some(instance_id) || r.candidates.iter().any(|c| c == instance_id))
+            .collect();
+        let mut out = Vec::with_capacity(rows.len());
+        for resolution in rows {
+            if self.resolution_visible(principal, &resolution)? {
+                out.push(resolution);
+            }
+        }
+        Ok(out)
+    }
+
+    /// The one rule for reading a resolution, direct or in a collection: every
+    /// instance it names (bound or candidate) must be visible, and a
+    /// resolution that names no instance is the owner's alone.
+    pub(crate) fn resolution_visible(&self, principal: &Principal, resolution: &Resolution) -> Result<bool> {
+        let mut ids: Vec<&str> = resolution.candidates.iter().map(String::as_str).collect();
+        ids.extend(resolution.instance_id.as_deref());
+        if ids.is_empty() {
+            return Ok(principal.actor == self.owner);
+        }
+        for id in ids {
+            if !self.visible(principal, id)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     pub fn get_observation(&self, principal: &Principal, id: &str) -> Result<Observation> {

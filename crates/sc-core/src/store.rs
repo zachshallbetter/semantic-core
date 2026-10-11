@@ -10,6 +10,7 @@ use sc_envelope::{AccessLevel, Provenance, ProvenanceKind};
 use sc_vocab::EntityClass;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::path::Path;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -64,6 +65,10 @@ impl Kind {
 impl Store {
     /// Open an existing library.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+        if !path.exists() {
+            return Err(Error::NotFound(format!("library {}", path.display())));
+        }
         let conn = Connection::open(path)?;
         Self::from_connection(conn, None)
     }
@@ -81,6 +86,28 @@ impl Store {
 
     fn from_connection(conn: Connection, owner: Option<&str>) -> Result<Self> {
         conn.execute_batch(crate::schema::SCHEMA)?;
+        conn.execute_batch(crate::schema::PREVIOUS_INDEX).map_err(|e| {
+            Error::Integrity(format!(
+                "the event log already holds a fork (two events name the same predecessor), so the one-successor index cannot be created; repair the log before opening this library ({e})"
+            ))
+        })?;
+        conn.execute(
+            "INSERT OR IGNORE INTO library_secret (id, salt) VALUES ('default', ?1)",
+            params![fresh_salt()],
+        )?;
+        {
+            let salt = salt_in(&conn)?;
+            let mut missing = conn.prepare(
+                "SELECT hash FROM events WHERE hash NOT IN (SELECT hash FROM event_aliases) ORDER BY seq",
+            )?;
+            let hashes: Vec<String> = missing.query_map([], |row| row.get(0))?.collect::<std::result::Result<_, _>>()?;
+            for hash in hashes {
+                conn.execute(
+                    "INSERT OR IGNORE INTO event_aliases (hash, alias) VALUES (?1, ?2)",
+                    params![hash, alias_for(&salt, &hash)],
+                )?;
+            }
+        }
         let existing: Option<(String, String)> = conn
             .query_row("SELECT authority, owner FROM policy WHERE id = 'default'", [], |row| {
                 Ok((row.get(0)?, row.get(1)?))
@@ -97,7 +124,7 @@ impl Store {
                 if let Some(requested) = requested {
                     if requested != existing_owner {
                         return Err(Error::Unauthorized(format!(
-                            "library is owned by {existing_owner:?}, not {requested:?}"
+                            "{requested:?} is not the owner of this library"
                         )));
                     }
                 }
@@ -195,7 +222,11 @@ impl Store {
         origin: Option<String>,
     ) -> Result<Event> {
         let at = self.now();
-        let previous = self.last_hash()?;
+        // The write lock is taken before `previous` is read, so two writers
+        // cannot both chain to the same predecessor; UNIQUE(previous) backs
+        // that up at the schema.
+        let tx = self.conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let previous = last_hash_in(&tx)?;
         let record = EventRecord {
             previous,
             actor: principal.actor.clone(),
@@ -207,7 +238,6 @@ impl Store {
             change,
         };
         let envelope = Self::envelope_for(record, kind, window, audience)?;
-        let tx = self.conn.transaction()?;
         let event = Self::insert_and_apply(&tx, envelope)?;
         tx.commit()?;
         Ok(event)
@@ -260,15 +290,48 @@ impl Store {
             ],
         )?;
         let seq = tx.last_insert_rowid();
+        let salt = salt_in(tx)?;
+        tx.execute(
+            "INSERT OR IGNORE INTO event_aliases (hash, alias) VALUES (?1, ?2)",
+            params![hash, alias_for(&salt, &hash)],
+        )?;
         Self::apply(tx, &record.change, &hash)?;
         Ok(Event { seq, hash, envelope })
     }
 
-    pub(crate) fn last_hash(&self) -> Result<Option<String>> {
-        Ok(self
-            .conn
-            .query_row("SELECT hash FROM events ORDER BY seq DESC LIMIT 1", [], |row| row.get(0))
-            .optional()?)
+    /// An event as a principal may see it. The owner sees the log as stored;
+    /// anyone else sees positions renumbered within their own view and no
+    /// `previous` link, so gaps left by withheld events do not show.
+    pub(crate) fn project_event(&self, principal: &Principal, mut event: Event, position: usize) -> Result<Event> {
+        if principal.actor != self.owner {
+            event.seq = position as i64;
+            event.envelope.body.previous = None;
+            event.hash = self.viewer_event_id(principal, &event.hash)?;
+            if let Change::AssertionRetracted { compensates, .. } = &mut event.envelope.body.change {
+                *compensates = self.viewer_event_id(principal, compensates)?;
+            }
+        }
+        Ok(event)
+    }
+
+    /// The identifier a restricted viewer sees for an event: keyed by the
+    /// library secret and the viewer, so it cannot be recomputed from the
+    /// envelope and does not correlate across viewers.
+    pub fn viewer_event_id(&self, principal: &Principal, hash: &str) -> Result<String> {
+        let salt = salt_in(&self.conn)?;
+        let mut hasher = Sha256::new();
+        hasher.update(salt.as_bytes());
+        hasher.update([0]);
+        hasher.update(principal.actor.as_bytes());
+        hasher.update([0]);
+        hasher.update(hash.as_bytes());
+        Ok(format!("view:{:x}", hasher.finalize()))
+    }
+
+    /// The per-library alias of a stored hash, as used for `origin` in a
+    /// restricted export.
+    pub(crate) fn alias_of(&self, hash: &str) -> Result<String> {
+        Ok(alias_for(&salt_in(&self.conn)?, hash))
     }
 
     /// Every event in order. Owner only: the raw log is the trust boundary.
@@ -292,7 +355,16 @@ impl Store {
     }
 
     /// Walk the log, recomputing every hash and checking each `previous`
-    /// link. Returns the number of events when the chain is intact.
+    /// link. Returns the number of events when the chain is intact. Owner
+    /// only: the count and the gaps are the log's shape, which a restricted
+    /// principal may not learn.
+    pub fn verify_chain_as(&self, principal: &Principal) -> Result<usize> {
+        self.require_owner(principal)?;
+        self.verify_chain()
+    }
+
+    /// `verify_chain_as` for the owner; used by replay and by tests that
+    /// hold the library itself.
     pub fn verify_chain(&self) -> Result<usize> {
         let events = self.all_events()?;
         let mut previous: Option<String> = None;
@@ -460,6 +532,13 @@ impl Store {
             Change::RelationshipDeclared { relationship } => {
                 require_entity(tx, &relationship.source_id)?;
                 require_entity(tx, &relationship.target_id)?;
+                // The flag is derived from the predicate, never trusted from
+                // the record: an imported file cannot promote an unknown one.
+                let predicate = sc_vocab::Predicate::parse(&relationship.predicate)
+                    .map_err(|e| Error::Integrity(format!("relationship {}: {e}", relationship.id)))?;
+                let mut relationship = relationship.clone();
+                relationship.materializes = predicate.materializes();
+                let relationship = &relationship;
                 insert_entity(
                     tx,
                     &relationship.id,
@@ -667,12 +746,11 @@ impl Store {
 
     pub fn get_resolution(&self, principal: &Principal, id: &str) -> Result<Resolution> {
         let resolution: Resolution = self.read("resolutions", id)?;
-        if let Some(instance_id) = &resolution.instance_id {
-            self.require_visible(principal, instance_id)?;
+        if self.resolution_visible(principal, &resolution)? {
+            Ok(resolution)
         } else {
-            self.require_owner(principal).map_err(|_| Error::NotFound(id.to_string()))?;
+            Err(Error::NotFound(id.to_string()))
         }
-        Ok(resolution)
     }
 
     /// Effective disclosure level of an identifier, for export.
@@ -842,13 +920,29 @@ impl Store {
     /// Revisions of an artifact, newest last.
     pub fn revisions_of(&self, principal: &Principal, artifact_id: &str) -> Result<Vec<Revision>> {
         self.require_visible(principal, artifact_id)?;
-        self.query_docs("SELECT doc FROM revisions WHERE artifact_id = ?1 ORDER BY rowid", params![artifact_id])
+        let rows: Vec<Revision> =
+            self.query_docs("SELECT doc FROM revisions WHERE artifact_id = ?1 ORDER BY rowid", params![artifact_id])?;
+        self.retain_visible(principal, rows, |r| &r.id)
+    }
+
+    /// Keep the rows the principal may read one by one, the same rule a
+    /// direct `get_*` applies.
+    pub(crate) fn retain_visible<T>(&self, principal: &Principal, rows: Vec<T>, id: impl Fn(&T) -> &str) -> Result<Vec<T>> {
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            if self.visible(principal, id(&row))? {
+                out.push(row);
+            }
+        }
+        Ok(out)
     }
 
     /// Instances of an artifact, including missing and unavailable ones.
     pub fn instances_of(&self, principal: &Principal, artifact_id: &str) -> Result<Vec<Instance>> {
         self.require_visible(principal, artifact_id)?;
-        self.query_docs("SELECT doc FROM instances WHERE artifact_id = ?1 ORDER BY rowid", params![artifact_id])
+        let rows: Vec<Instance> =
+            self.query_docs("SELECT doc FROM instances WHERE artifact_id = ?1 ORDER BY rowid", params![artifact_id])?;
+        self.retain_visible(principal, rows, |i| &i.id)
     }
 
     pub(crate) fn query_docs<T: DeserializeOwned>(
@@ -873,6 +967,36 @@ impl Store {
 
 pub(crate) fn json<T: Serialize>(value: &T) -> Result<String> {
     Ok(serde_json::to_string(value)?)
+}
+
+fn fresh_salt() -> String {
+    // Two ULIDs carry 160 random bits between them; the digest spreads them.
+    let mut hasher = Sha256::new();
+    hasher.update(ulid::Ulid::new().to_bytes());
+    hasher.update(ulid::Ulid::new().to_bytes());
+    hasher.update(std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos().to_le_bytes())
+        .unwrap_or([0; 16]));
+    format!("{:x}", hasher.finalize())
+}
+
+pub(crate) fn salt_in(conn: &Connection) -> Result<String> {
+    Ok(conn.query_row("SELECT salt FROM library_secret WHERE id = 'default'", [], |row| row.get(0))?)
+}
+
+pub(crate) fn alias_for(salt: &str, hash: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(salt.as_bytes());
+    hasher.update([1]);
+    hasher.update(hash.as_bytes());
+    format!("origin:{:x}", hasher.finalize())
+}
+
+pub(crate) fn last_hash_in(tx: &Transaction<'_>) -> Result<Option<String>> {
+    Ok(tx
+        .query_row("SELECT hash FROM events ORDER BY seq DESC LIMIT 1", [], |row| row.get(0))
+        .optional()?)
 }
 
 fn policy_owner(tx: &Transaction<'_>) -> Result<String> {
@@ -987,6 +1111,19 @@ fn write_assertion(tx: &Transaction<'_>, assertion: &Assertion, insert: bool) ->
 
 /// Decision D9: state from accepted assertions only.
 pub(crate) fn rematerialize(tx: &Transaction<'_>, relationship_id: &str) -> Result<RelationshipState> {
+    let materializes: i64 = tx.query_row(
+        "SELECT materializes FROM relationships WHERE id = ?1",
+        params![relationship_id],
+        |row| row.get(0),
+    )?;
+    if materializes == 0 {
+        // Unregistered predicates stay UNKNOWN whatever is asserted (D3).
+        tx.execute(
+            "UPDATE relationships SET state = ?2 WHERE id = ?1",
+            params![relationship_id, RelationshipState::Unknown.as_str()],
+        )?;
+        return Ok(RelationshipState::Unknown);
+    }
     let count = |polarity: Polarity| -> Result<usize> {
         Ok(tx.query_row(
             "SELECT COUNT(*) FROM assertions WHERE relationship_id = ?1 AND polarity = ?2 AND status = 'accepted'",

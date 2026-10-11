@@ -104,7 +104,7 @@ impl Store {
         target_id: &str,
     ) -> Result<Relationship> {
         self.require_owner(principal)?;
-        let predicate = Predicate::parse(predicate)?;
+        let predicate = Predicate::parse_for_declaration(predicate)?;
         let source_class = self.entity_class(principal, source_id)?;
         let target_class = self.entity_class(principal, target_id)?;
         predicate.check(source_class, target_class)?;
@@ -154,7 +154,8 @@ impl Store {
         evidence: Vec<Evidence>,
     ) -> Result<Assertion> {
         self.require_owner(principal)?;
-        self.get_relationship(principal, relationship_id)?;
+        let relationship = self.get_relationship(principal, relationship_id)?;
+        require_materialized(&relationship)?;
         let audience = self.audience_of(relationship_id)?;
         let assertion = Assertion {
             id: Self::new_id(),
@@ -215,6 +216,7 @@ impl Store {
             )));
         }
         let assertion = self.get_assertion(principal, assertion_id)?;
+        require_materialized(&self.get_relationship(principal, &assertion.relationship_id)?)?;
         match assertion.status {
             AssertionStatus::Proposed => {}
             AssertionStatus::Accepted => return Err(Error::Conflict(format!("{assertion_id} is already accepted"))),
@@ -297,10 +299,11 @@ impl Store {
 
     pub fn assertions_of(&self, principal: &Principal, relationship_id: &str) -> Result<Vec<Assertion>> {
         self.require_visible(principal, relationship_id)?;
-        self.query_docs(
+        let rows: Vec<Assertion> = self.query_docs(
             "SELECT doc FROM assertions WHERE relationship_id = ?1 ORDER BY rowid",
             params![relationship_id],
-        )
+        )?;
+        self.retain_visible(principal, rows, |a| &a.id)
     }
 
     /// Materialized relationships touching an entity that the principal may
@@ -408,7 +411,8 @@ impl Store {
             let (_, subject) = change.subject();
             let touches = subject == id || change.referenced_ids().iter().any(|r| r == id);
             if touches && self.change_visible(principal, change)? {
-                out.push(event);
+                let position = out.len() + 1;
+                out.push(self.project_event(principal, event, position)?);
             }
         }
         Ok(out)
@@ -429,15 +433,42 @@ impl Store {
                 resolutions.extend(self.resolutions_for_instance(principal, id)?);
             }
         }
-        let mut events = self.history(principal, relationship_id)?;
+        // History projects positions per call, so merge on the raw log and
+        // project once at the end.
+        let raw = |id: &str| -> Result<Vec<Event>> {
+            let owner = self.owner_principal();
+            let mut out = Vec::new();
+            for event in self.history(&owner, id)? {
+                if self.change_visible(principal, &event.envelope.body.change)? {
+                    out.push(event);
+                }
+            }
+            Ok(out)
+        };
+        let mut events = raw(relationship_id)?;
         for assertion in &assertions {
-            for event in self.history(principal, &assertion.id)? {
-                if !events.iter().any(|e| e.seq == event.seq) {
+            for event in raw(&assertion.id)? {
+                if !events.iter().any(|e| e.hash == event.hash) {
                     events.push(event);
                 }
             }
         }
+        // Merge by log identity, then renumber for a restricted viewer so the
+        // merged list carries no gaps either.
         events.sort_by_key(|event| event.seq);
+        if principal.actor != self.owner() {
+            let mut by_hash: Vec<Event> = Vec::new();
+            for event in events {
+                if !by_hash.iter().any(|e| e.hash == event.hash) {
+                    by_hash.push(event);
+                }
+            }
+            let mut projected = Vec::with_capacity(by_hash.len());
+            for (i, e) in by_hash.into_iter().enumerate() {
+                projected.push(self.project_event(principal, e, i + 1)?);
+            }
+            events = projected;
+        }
         Ok(Why {
             relationship,
             state,
@@ -482,6 +513,17 @@ impl Store {
             },
             Kind::Observation => return Err(Error::NotFound(id.to_string())),
         })
+    }
+}
+
+fn require_materialized(relationship: &Relationship) -> Result<()> {
+    if relationship.materializes {
+        Ok(())
+    } else {
+        Err(Error::Conflict(format!(
+            "relationship {} uses the unregistered predicate {}; it is preserved as a value and takes no assertions until the predicate is mapped",
+            relationship.id, relationship.predicate
+        )))
     }
 }
 

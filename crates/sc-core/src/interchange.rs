@@ -7,8 +7,12 @@
 //! owner authored first hand (events that arrived by import keep their
 //! original actor and are not re-shared under the owner's key), and every
 //! audience set is replaced by the disclosure level that leaves the device
-//! (D6). Each exported envelope names the local event it
-//! came from in `origin`, so a round trip is idempotent.
+//! (D6). Each exported envelope names the local event it came from in
+//! `origin`, so a round trip is idempotent. For the owner that is the stored
+//! hash; for anyone else it is a per-library alias keyed by the library
+//! secret, and `compensates` is aliased the same way, so nothing in a
+//! restricted export is derived from a stored hash the viewer could test
+//! against a recomputed envelope.
 //!
 //! Import fails closed. Every event is verified against the key bound to its
 //! actor before anything is applied; a file carrying a `PolicyEstablished`
@@ -96,7 +100,21 @@ impl Store {
             }
             let mut envelope = event.envelope.clone();
             envelope.body.previous = None;
-            envelope.body.origin = Some(event.envelope.body.origin.clone().unwrap_or(event.hash.clone()));
+            let is_owner = principal.actor == self.owner;
+            let name = |hash: &str| -> Result<String> {
+                if is_owner {
+                    Ok(hash.to_string())
+                } else {
+                    self.alias_of(hash)
+                }
+            };
+            envelope.body.origin = Some(match &event.envelope.body.origin {
+                Some(origin) => origin.clone(),
+                None => name(&event.hash)?,
+            });
+            if let Change::AssertionRetracted { compensates, .. } = &mut envelope.body.change {
+                *compensates = name(compensates)?;
+            }
             envelope.body.change.project_access();
             events.push(envelope.sign(key_id, signing_key)?);
         }
@@ -134,10 +152,10 @@ impl Store {
 
         let imported_at = self.now();
         let owner = self.owner.clone();
-        let mut previous = self.last_hash()?;
         let mut report = ImportReport::default();
         let mut created: BTreeSet<String> = BTreeSet::new();
-        let tx = self.conn.transaction()?;
+        let tx = self.conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let mut previous = crate::store::last_hash_in(&tx)?;
         for (index, signed) in interchange.events.iter().enumerate() {
             let incoming_hash = signed.envelope.canonical_hash()?;
             let origin = signed.envelope.body.origin.clone().unwrap_or_else(|| incoming_hash.clone());
@@ -205,7 +223,8 @@ impl Store {
 fn known_event(tx: &rusqlite::Transaction<'_>, hash: &str) -> Result<bool> {
     Ok(tx
         .query_row(
-            "SELECT 1 FROM events WHERE hash = ?1 OR origin = ?1 LIMIT 1",
+            "SELECT 1 FROM events WHERE hash = ?1 OR origin = ?1
+             UNION SELECT 1 FROM event_aliases WHERE alias = ?1 LIMIT 1",
             params![hash],
             |_| Ok(()),
         )

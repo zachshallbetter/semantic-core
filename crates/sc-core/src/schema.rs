@@ -5,6 +5,7 @@
 pub const SCHEMA: &str = r#"
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
+PRAGMA busy_timeout = 5000;
 
 CREATE TABLE IF NOT EXISTS policy (
     id        TEXT PRIMARY KEY,
@@ -22,6 +23,21 @@ CREATE TABLE IF NOT EXISTS events (
     envelope TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_subject ON events(subject);
+
+-- A random per-library secret. It keys the identifiers restricted viewers
+-- see in place of event hashes and the aliases export uses for them. It is
+-- never exported and never part of any event.
+CREATE TABLE IF NOT EXISTS library_secret (
+    id   TEXT PRIMARY KEY,
+    salt TEXT NOT NULL
+);
+
+-- Per-library alias of each event hash, keyed by the secret, so an event
+-- that left in a restricted export can be recognised when it comes back.
+CREATE TABLE IF NOT EXISTS event_aliases (
+    hash  TEXT PRIMARY KEY,
+    alias TEXT NOT NULL UNIQUE
+);
 CREATE INDEX IF NOT EXISTS events_origin ON events(origin);
 
 -- One row per identifier-bearing record, for access checks and search.
@@ -121,7 +137,13 @@ CREATE TABLE IF NOT EXISTS resolutions (
 CREATE INDEX IF NOT EXISTS resolutions_instance ON resolutions(instance_id);
 "#;
 
-/// Tables rebuilt by replay. The event log and policy are kept.
+/// One successor per event: two writers cannot both chain to the same
+/// predecessor. Run separately from the schema so a library that already
+/// holds a fork gets a readable error. Libraries created before the index
+/// gain it on their next open.
+pub const PREVIOUS_INDEX: &str = "CREATE UNIQUE INDEX IF NOT EXISTS events_previous ON events(previous);";
+
+/// Tables rebuilt by replay. The event log, policy, secret and aliases are kept.
 pub const MATERIALIZED_TABLES: &[&str] = &[
     "entities",
     "things",

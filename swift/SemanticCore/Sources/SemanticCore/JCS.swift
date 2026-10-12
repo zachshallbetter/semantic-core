@@ -201,6 +201,7 @@ public enum JCS {
                 index += 1
                 if scalar == "\"" { return String(out) }
                 if scalar != "\\" {
+                    guard scalar.value >= 0x20 else { throw Error.syntax("unescaped control character") }
                     out.append(scalar)
                     continue
                 }
@@ -263,7 +264,14 @@ public enum JCS {
             let start = index
             if !atEnd, scalars[index] == "-" { index += 1 }
             guard !atEnd, ("0"..."9").contains(scalars[index]) else { throw Error.syntax("expected a value") }
-            while !atEnd, ("0"..."9").contains(scalars[index]) { index += 1 }
+            if scalars[index] == "0" {
+                index += 1
+                guard atEnd || !("0"..."9").contains(scalars[index]) else {
+                    throw Error.syntax("leading zero in number")
+                }
+            } else {
+                while !atEnd, ("0"..."9").contains(scalars[index]) { index += 1 }
+            }
             if !atEnd, [".", "e", "E"].contains(scalars[index]) {
                 throw Error.number("fractions and exponents are outside the envelope's value space")
             }

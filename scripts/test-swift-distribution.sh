@@ -30,7 +30,7 @@ import Foundation
 import SemanticCore
 import SemanticCoreSpotlight
 
-let json = "{\"b\":1,\"a\":0}"
+let json = #"{"schema_version":"sc-event-0.1","subject_id":"sc:thing:01J9ZX0000000000000000AVA1","compatibility":{"protocol":"sc-event-0.1","subject_schema":"note-1"},"provenance":{"kind":"declared","authority":"owner-local","source":"actor:ava","source_hash":"sha256:6186c1f131e8c42ed706e0180641b2c414f1a34ae8ca4ed98884c140768cfd2a"},"minimum_access":"owner","body":{"text":"Ava's dishwasher","members":[{"name":"title","minimum_access":"public"},{"name":"serial","minimum_access":"owner"}]}}"#
 let canonical = try JCS.canonicalize(json)
 let ffiCanonical = try Envelope.canonicalJSON(of: json)
 let ffiHash = try Envelope.hash(of: json)

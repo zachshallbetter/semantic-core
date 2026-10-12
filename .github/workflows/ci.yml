@@ -15,7 +15,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
       - name: Build the sc-ffi static library
         run: scripts/build-ffi.sh
       - name: Swift package tests
         run: swift test --package-path swift/SemanticCore
+      - name: Package the standalone Swift distribution
+        run: scripts/package-swift.sh
+      - name: Test a separate Git dependency consumer
+        run: scripts/test-swift-distribution.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SemanticCore-macOS-SwiftPM
+          path: dist/SemanticCore

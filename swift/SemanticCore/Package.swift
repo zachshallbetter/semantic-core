@@ -1,9 +1,8 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// The static library comes from `scripts/build-ffi.sh` at the repository
-// root, which runs cargo and copies `libsc_ffi.a` into `Libraries/`
-// (gitignored). The linker search path below is relative to this package.
+// Source checkouts generate this artifact with scripts/build-ffi.sh.
+// Distribution packages include it and need neither Rust nor unsafe flags.
 let package = Package(
     name: "SemanticCore",
     platforms: [.macOS(.v14)],
@@ -12,15 +11,11 @@ let package = Package(
         .library(name: "SemanticCoreSpotlight", targets: ["SemanticCoreSpotlight"]),
     ],
     targets: [
-        .systemLibrary(name: "CSemanticCore", path: "Sources/CSemanticCore"),
+        .binaryTarget(name: "CSemanticCore", path: "Libraries/CSemanticCore.xcframework"),
         .target(
             name: "SemanticCore",
             dependencies: ["CSemanticCore"],
-            swiftSettings: [.swiftLanguageMode(.v6)],
-            linkerSettings: [
-                .unsafeFlags(["-L", "Libraries"]),
-                .linkedLibrary("sc_ffi"),
-            ]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
             name: "SemanticCoreTests",

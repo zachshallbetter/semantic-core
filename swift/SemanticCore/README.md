@@ -4,15 +4,24 @@ A Swift package over the `sc-ffi` C ABI. Swift tools 6.0, Swift 6 language mode,
 
 ## Build
 
-The package links the static library that `sc-ffi` produces. Build it first, from the repository root:
+Source checkouts build the Rust FFI into a universal macOS XCFramework. Install Xcode and both Rust targets, then build from the repository root:
 
 ```sh
-scripts/build-ffi.sh          # cargo build -p sc-ffi --release, then copies libsc_ffi.a into swift/SemanticCore/Libraries/
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+scripts/build-ffi.sh          # locked release builds, universal macOS XCFramework
 cd swift/SemanticCore
 swift test
 ```
 
-`Libraries/` and `.build/` are gitignored. The `CSemanticCore` system-library target reads the header from `crates/sc-ffi/include/sc.h` through `Sources/CSemanticCore/shim.h`; the package's linker settings add `Libraries/` to the search path and link `sc_ffi`.
+`Libraries/` and `.build/` are gitignored. The `CSemanticCore` binary target includes its own C header and module map; no header reaches outside the package and no target uses `unsafeFlags`. The XCFramework contains arm64 and x86_64 macOS slices with a macOS 14 deployment target. `--debug` builds both slices in debug mode.
+
+## Distribution
+
+After building the XCFramework, run `scripts/package-swift.sh` to assemble `dist/SemanticCore`. It includes the Swift sources, the binary target, licenses, and source commit identifier. It needs neither the Rust workspace nor a consumer-side Cargo build. The packaging script refuses to overwrite an existing distribution.
+
+CI tests the full source package, then assembles this distribution and runs `scripts/test-swift-distribution.sh`. That test commits the complete distribution to a temporary Git repository and consumes it by URL and version from a separate Swift package. It imports both products and exercises FFI canonicalization, hashing and SQLite-backed Store operations. CI uploads the self-contained package as `SemanticCore-macOS-SwiftPM`.
+
+For a remote SwiftPM dependency, publish the complete distribution directory, including `Libraries/CSemanticCore.xcframework`, to a tagged package repository. Point the consumer at that repository. The source repository alone is not a ready-to-consume remote dependency because its generated binaries are gitignored. No release or distribution repository is published automatically. Only macOS is supported; iOS and other Apple platforms require additional native builds and platform declarations.
 
 ## Implemented
 

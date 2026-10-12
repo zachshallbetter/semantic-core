@@ -7,7 +7,7 @@ A Swift package over the `sc-ffi` C ABI. Swift tools 6.0, Swift 6 language mode,
 The package links the static library that `sc-ffi` produces. Build it first, from the repository root:
 
 ```sh
-scripts/build-ffi.sh          # cargo build -p sc-ffi --release, then copies libsc_ffi.a into swift/SemanticCore/Libraries/
+scripts/build-ffi.sh          # cargo build -p sc-ffi --locked --release, then copies libsc_ffi.a into swift/SemanticCore/Libraries/
 cd swift/SemanticCore
 swift test
 ```

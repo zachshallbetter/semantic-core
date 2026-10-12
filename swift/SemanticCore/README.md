@@ -34,6 +34,8 @@ swift test
 
 ## Not proven
 
+`JSONObject` decodes numeric values as `.integer(Int64)` where possible, including integers above 2^53, and exposes them through `.integer`. Other numbers retain `.number(Double)`; values outside Int64 are not guaranteed exact. Exhaustive switches over `JSONObject` must handle the new integer case. This inspection representation does not widen the JCS envelope integer bounds.
+
 No live Spotlight query is exercised. Registering an `IndexedEntity` with `CSSearchableIndex` needs an app bundle and entitlements, so the attribute set is tested as data and real indexing is Stage 2. `hideInSpotlight` (macOS 15.4) is not used.
 
 ## Not implemented

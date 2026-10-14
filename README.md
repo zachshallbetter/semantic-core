@@ -8,7 +8,7 @@ A receipt, a warranty, a manual and a service record can all refer to the same d
 
 ## Status
 
-Stage 1 Rust core implemented and tested: `sc-envelope`, `sc-vocab`, `sc-core` and `sc-cli` pass their fixtures under `cargo test --workspace`, and the Reflective Rust golden vector reproduces. `sc-ffi` (C ABI) and the Swift package `swift/SemanticCore` are implemented and tested: the golden vector reproduces through the FFI and independently in Swift, CryptoKit verifies the signed vector, and the Stage 1 demonstration runs through the Swift store. The Spotlight spike is not started. Nothing in this repository is a conformance claim for any external protocol.
+Stage 1 Rust core implemented and tested: `sc-envelope`, `sc-vocab`, `sc-core` and `sc-cli` pass their fixtures under `cargo test --workspace`, and the Reflective Rust golden vector reproduces. `sc-ffi` (C ABI) and the Swift package `swift/SemanticCore` are implemented and tested: the golden vector reproduces through the FFI and independently in Swift, CryptoKit verifies the signed vector, and the Stage 1 demonstration runs through the Swift store. A Spotlight indexed-entity spike is done; live Spotlight registration needs an app bundle and is Stage 2. Nothing in this repository is a conformance claim for any external protocol.
 
 - [Definition v0.2.2](docs/semantic-core-definition-v0.2.2.md) is the architecture of record: ontology, decision boundaries, protocol responsibilities, macOS integration, security, stage plan, fixtures, and the nine answered design decisions.
 - [Roadmap](docs/ROADMAP.md) is the stage plan and task order.
@@ -29,7 +29,7 @@ fixtures/           moves, copies, edits, deletes, ambiguous, containers, access
 
 ## Stage 1 proof
 
-Link two files, move one, resolve and inspect the relationship, retract it, inspect the history. Offline, with no model, no server, and no Finder extension. The full acceptance list is section 11 of the definition plus the three additions in the build brief.
+Link two files, move one, resolve and inspect the relationship, retract it, inspect the history. Offline, with no model, no server, and no Finder extension. Stage 1 is complete when the nine proofs in the definition and the fixture list pass in CI; see the [roadmap](docs/ROADMAP.md).
 
 ## Principles that do not move
 

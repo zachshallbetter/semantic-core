@@ -191,6 +191,7 @@ public indirect enum JSONObject: Decodable, Sendable {
     case object([String: JSONObject])
     case array([JSONObject])
     case string(String)
+    case integer(Int64)
     case number(Double)
     case bool(Bool)
     case null
@@ -201,6 +202,8 @@ public indirect enum JSONObject: Decodable, Sendable {
             self = .null
         } else if let value = try? container.decode(Bool.self) {
             self = .bool(value)
+        } else if let value = try? container.decode(Int64.self) {
+            self = .integer(value)
         } else if let value = try? container.decode(Double.self) {
             self = .number(value)
         } else if let value = try? container.decode(String.self) {
@@ -224,6 +227,13 @@ public indirect enum JSONObject: Decodable, Sendable {
 
     public var array: [JSONObject]? {
         if case .array(let items) = self { return items }
+        return nil
+    }
+
+    /// Exact signed integer value when it fits in Int64. Other numeric
+    /// values retain the existing Double representation in `.number`.
+    public var integer: Int64? {
+        if case .integer(let value) = self { return value }
         return nil
     }
 }

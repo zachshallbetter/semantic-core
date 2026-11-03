@@ -18,7 +18,7 @@ cd "$root"
 # Match the Swift package's deployment target so the linker does not warn.
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-14.0}"
 # shellcheck disable=SC2086
-cargo build -p sc-ffi $flag
+cargo build -p sc-ffi --locked $flag
 mkdir -p swift/SemanticCore/Libraries
 cp "target/$profile/libsc_ffi.a" swift/SemanticCore/Libraries/libsc_ffi.a
 echo "swift/SemanticCore/Libraries/libsc_ffi.a ($profile)"

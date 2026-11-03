@@ -1,5 +1,0 @@
-module CSemanticCore {
-    header "shim.h"
-    link "sc_ffi"
-    export *
-}

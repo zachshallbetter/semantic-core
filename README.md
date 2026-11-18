@@ -27,6 +27,19 @@ swift/SemanticCore  Swift package over sc-ffi: Envelope, Signature, Hash, JCS, S
 fixtures/           moves, copies, edits, deletes, ambiguous, containers, access, vectors
 ```
 
+## Verification
+
+The commands CI runs (`.github/workflows/ci.yml`). The Rust workspace needs Rust 1.80 or later; the Swift checks need macOS with Swift and the `aarch64-apple-darwin` and `x86_64-apple-darwin` Rust targets.
+
+```sh
+cargo build --workspace
+cargo test --workspace                          # envelope, vocabulary, core, CLI and the fixtures
+scripts/build-ffi.sh                            # the sc-ffi static library
+swift test --package-path swift/SemanticCore    # Swift package, including the golden vector
+scripts/package-swift.sh                        # the standalone Swift distribution
+scripts/test-swift-distribution.sh              # a separate Git dependency consumer
+```
+
 ## Stage 1 proof
 
 Link two files, move one, resolve and inspect the relationship, retract it, inspect the history. Offline, with no model, no server, and no Finder extension. Stage 1 is complete when the nine proofs in the definition and the fixture list pass in CI; see the [roadmap](docs/ROADMAP.md).

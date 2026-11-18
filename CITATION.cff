@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Semantic Core"
+abstract: >-
+  A portable, local-first identity and relationship substrate for files,
+  information artifacts, and the things they describe.
+type: software
+authors:
+  - family-names: Shallbetter
+    given-names: Zach
+version: "0.1.0"
+license: MIT OR Apache-2.0
+repository-code: "https://github.com/zachshallbetter/semantic-core"
+keywords:
+  - identity
+  - provenance
+  - local-first
+  - relationships
